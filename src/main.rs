@@ -1,4 +1,5 @@
 mod scanner;
+mod parser;
 
 use std::env;
 use std::fs;
@@ -14,15 +15,16 @@ fn main() {
 }
 
 fn parse_file(text: String) {
-    let mut s = scanner::Scanner::new(&text);
+    // this is a monstrosity tbh
+    let tokens = scanner::Scanner::new(&text)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .peekable();
 
-    loop {
-        match s.advance() {
-            Ok(t) => println!("{:?}", t),
-            Err(err) => {
-                println!("Error [{:?}]", err);
-                break;
-            }
-        }
+    let mut p = parser::Parser::new(tokens);
+
+    match p.parse() {
+        Ok(ast) => println!("{:?}", ast),
+        Err(err) => println!("Error: {:?}", err),
     }
 }
