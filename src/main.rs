@@ -1,6 +1,8 @@
 mod scanner;
 mod parser;
 
+use parser::HuckAst;
+
 use std::env;
 use std::fs;
 
@@ -20,7 +22,17 @@ fn parse_file(text: String) {
     let mut p = parser::Parser::new(tokens);
 
     match p.parse() {
-        Ok(ast) => println!("{:?}", ast),
+        Ok(ast) => println!("{:?}", eval(ast)),
         Err(err) => println!("Error: {:?}", err),
+    }
+}
+
+fn eval(ast: HuckAst) -> Option<u64> {
+    match ast {
+        HuckAst::Num(n) => Some(n),
+        HuckAst::Plus(l, r) => Some(eval(*l)? + eval(*r)?),
+        HuckAst::Minus(l, r) => Some(eval(*l)? - eval(*r)?),
+        HuckAst::Times(l, r) => Some(eval(*l)? * eval(*r)?),
+        HuckAst::Div(l, r) => Some(eval(*l)? / eval(*r)?),
     }
 }
