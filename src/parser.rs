@@ -52,7 +52,7 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: TokenStream<'a>) -> Self {
-        Self { tokens: tokens }
+        Self { tokens }
     }
 
     pub fn parse(&mut self) -> ParseResult {
