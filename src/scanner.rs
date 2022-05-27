@@ -2,7 +2,7 @@ use std::vec::IntoIter;
 use std::iter::Peekable;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum TokenType {
+pub enum TokenType { // Unify TokenType and Token???
     Plus,
     Minus,
     Star,
@@ -21,20 +21,20 @@ pub struct Token {
 
 #[derive(Debug)]
 pub struct Scanner {
-    source: Peekable<IntoIter<char>>,
+    source: Peekable<IntoIter<(usize, char)>>,
 }
 
 impl Scanner {
     pub fn new(source: &str) -> Self {
         Scanner{
-            source: source.chars().collect::<Vec<_>>().into_iter().peekable(),
+            source: source.char_indices().collect::<Vec<_>>().into_iter().peekable(),
         }
     }
 
     fn number(&mut self, c: char) -> Option<Token> {
         let mut number_string: String = c.to_string();
-        while is_digit(*self.source.peek()?) {
-            number_string.push(self.source.next()?);
+        while is_digit(self.source.peek()?.1) {
+            number_string.push(self.source.next()?.1);
         }
         return Some(Token{token_type: Number, chars: number_string});
     }
@@ -46,33 +46,19 @@ impl Iterator for Scanner {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let c = self.source.next();
+            let c = self.source.next()?.1;
             match c {
-                Some(c) if is_whitespace(c) => { continue; }
-                Some(c) if is_digit(c) => {
+                c if is_whitespace(c) => { continue; }
+                c if is_digit(c) => {
                     return self.number(c)
                 },
-                Some('+') => {
-                    return Some(make_token(Plus, "+"))
-                },
-                Some('-') => {
-                    return Some(make_token(Minus, "-"))
-                },
-                Some('*') => {
-                    return Some(make_token(Star, "*"))
-                },
-                Some('/') => {
-                    return Some(make_token(Slash, "/"))
-                },
-                Some('(') => {
-                    return Some(make_token(LParen, "("))
-                },
-                Some(')') => {
-                    return Some(make_token(RParen, ")"))
-                },
-                _ => {
-                    return None;
-                }
+                '+' => return Some(make_token(Plus, "+")),
+                '-' => return Some(make_token(Minus, "-")),
+                '*' => return Some(make_token(Star, "*")),
+                '/' => return Some(make_token(Slash, "/")),
+                '(' => return Some(make_token(LParen, "(")),
+                ')' => return Some(make_token(RParen, ")")),
+                _ => return None,
             };
         }
     }
