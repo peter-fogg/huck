@@ -1,20 +1,14 @@
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum TokenType { // Unify TokenType and Token???
+pub enum Token<'a> {
     Plus,
     Minus,
     Star,
     Slash,
-    Number,
+    Number(&'a str),
     RParen,
-    LParen
+    LParen,
 }
-use TokenType::*;
-
-#[derive(Debug, PartialEq, Clone)]
-pub struct Token<'a> {
-    pub token_type: TokenType,
-    pub chars: &'a str
-}
+use Token::*;
 
 #[derive(Debug)]
 pub struct Scanner<'a> {
@@ -39,7 +33,7 @@ impl<'a> Scanner<'a> {
             self.position += 1;
         }
 
-        Some(Token{token_type: Number, chars: self.source.get(start_index..self.position)?})
+        Some(Number(self.source.get(start_index..self.position)?))
     }
 
     fn next_char(&mut self) -> Option<&'a str> {
@@ -66,11 +60,6 @@ impl<'a> Scanner<'a> {
     pub fn is_whitespace(s: &'a str) -> bool {
         " \t\n".contains(s)
     }
-
-    pub fn make_token(token_type: TokenType, chars: &'a str) -> Token {
-        Token{token_type: token_type, chars: chars}
-    }
-
 }
 
 impl<'a> Iterator for Scanner<'a> {
@@ -84,12 +73,12 @@ impl<'a> Iterator for Scanner<'a> {
                 c if Scanner::is_digit(c) => {
                     return self.number()
                 },
-                "+" => return Some(Scanner::make_token(Plus, c)),
-                "-" => return Some(Scanner::make_token(Minus, c)),
-                "*" => return Some(Scanner::make_token(Star, c)),
-                "/" => return Some(Scanner::make_token(Slash, c)),
-                "(" => return Some(Scanner::make_token(LParen, c)),
-                ")" => return Some(Scanner::make_token(RParen, c)),
+                "+" => return Some(Plus),
+                "-" => return Some(Minus),
+                "*" => return Some(Star),
+                "/" => return Some(Slash),
+                "(" => return Some(LParen),
+                ")" => return Some(RParen),
                 _ => return None,
             };
         }
@@ -103,26 +92,18 @@ mod test {
     #[test]
     fn whitespace() {
         let tokens = Scanner::new(" \t      \n\n  \n").collect::<Vec<_>>();
-
         assert_eq!(tokens, vec![]);
     }
 
     #[test]
     fn numbers() {
         let tokens = Scanner::new("1124\n").collect::<Vec<_>>();
-
-        assert_eq!(tokens, vec![Scanner::make_token(Number, "1124")]);
+        assert_eq!(tokens, vec![Number("1124")]);
     }
 
     #[test]
     fn operators() {
-        let tokens = Scanner::new("* - + /\n").collect::<Vec<_>>();
-
-        assert_eq!(tokens, vec![
-            Scanner::make_token(Star, "*"),
-            Scanner::make_token(Minus, "-"),
-            Scanner::make_token(Plus, "+"),
-            Scanner::make_token(Slash, "/"),
-        ]);
+        let tokens = Scanner::new("* - + / ( )\n").collect::<Vec<_>>();
+        assert_eq!(tokens, vec![Star, Minus, Plus, Slash, LParen, RParen]);
     }
 }

@@ -1,4 +1,4 @@
-use crate::scanner::{Scanner, TokenType, Token};
+use crate::scanner::{Scanner, Token};
 use std::iter::{Iterator, Peekable};
 
 #[derive(Debug, PartialEq)]
@@ -62,30 +62,33 @@ impl<'a> Parser<'a> {
     fn parse_prec(&mut self, prec: Prec) -> ParseResult {
         let t = self.tokens.next().ok_or(ParseError::Eof)?;
 
-        let prefix_rule = Self::get_prefix_rule(t.token_type)?;
+        let prefix_rule = Self::get_prefix_rule(t)?;
         let mut lhs = prefix_rule(self, t)?;
 
-        let mut next_prec = self.tokens.peek().map(|next| Self::get_prec(next.token_type));
+        let mut next_prec = self.tokens.peek().map(|next| Self::get_prec(*next));
         while next_prec.is_some() && prec <= next_prec.unwrap() {
 
             let next = self.tokens.next().unwrap();
 
-            let t_type = next.token_type;
-
-            let infix_rule = Self::get_infix_rule(t_type)?;
+            let infix_rule = Self::get_infix_rule(next)?;
 
             lhs = infix_rule(self, next, lhs)?;
-            next_prec = self.tokens.peek().map(|next| Self::get_prec(next.token_type));
+            next_prec = self.tokens.peek().map(|next| Self::get_prec(*next)); // TODO map eta reduce
         }
 
         Ok(lhs)
     }
 
     fn number(&mut self, token: Token) -> ParseResult {
-        if let Ok(num) = token.chars.parse() {
-            Ok(HuckAst::Num(num))
-        } else {
-            Err(ParseError::Fucked(format!("Failed to parse number {}", token.chars)))
+        match token {
+            Token::Number(num_str) => {
+                if let Ok(num) = num_str.parse() {
+                    Ok(HuckAst::Num(num))
+                } else {
+                    Err(ParseError::Fucked(format!("Failed to parse number {}", num_str)))
+                }
+            }
+            _ => Err(ParseError::Fucked(format!("Expected number, found {:?}", token)))
         }
     }
 
@@ -112,45 +115,45 @@ impl<'a> Parser<'a> {
 
     fn grouping(&mut self, _token: Token<'a>) -> ParseResult {
         let grouping = self.parse_prec(Prec::Expr)?;
-        self.consume(TokenType::RParen)?;
+        self.consume(Token::RParen)?;
         Ok(grouping)
     }
 
-    fn consume(&mut self, token_type: TokenType) -> Result<(), ParseError> {
+    fn consume(&mut self, token: Token) -> Result<(), ParseError> {
         match self.tokens.peek() {
-            Some(c) if c.token_type == token_type => {
+            Some(c) if *c == token => {
                 _ = self.tokens.next();
                 Ok(())
             },
-            _ => Err(ParseError::Fucked(format!("Expected token type {:?}", token_type))),
+            _ => Err(ParseError::Fucked(format!("Expected token {:?}", token))),
         }
     }
 
-    fn get_infix_rule(t: TokenType) -> Result<InfixRule<'a>, ParseError> {
+    fn get_infix_rule(t: Token) -> Result<InfixRule<'a>, ParseError> {
         match t {
-            TokenType::Plus => Ok(Self::plus),
-            TokenType::Minus => Ok(Self::minus),
-            TokenType::Star => Ok(Self::times),
-            TokenType::Slash => Ok(Self::div),
+            Token::Plus => Ok(Self::plus),
+            Token::Minus => Ok(Self::minus),
+            Token::Star => Ok(Self::times),
+            Token::Slash => Ok(Self::div),
             _ => Err(ParseError::NotImplemented(format!("No infix rule for token type {:?}", t))),
         }
     }
     
-    fn get_prefix_rule(t: TokenType) -> Result<PrefixRule<'a>, ParseError> {
+    fn get_prefix_rule(t: Token) -> Result<PrefixRule<'a>, ParseError> {
         match t {
-            TokenType::Number => Ok(Self::number),
-            TokenType::LParen => Ok(Self::grouping),
+            Token::Number(_) => Ok(Self::number),
+            Token::LParen => Ok(Self::grouping),
             _ => Err(ParseError::NotImplemented(format!("No prefix rule for token type {:?}", t))),
         }
     }
 
-    fn get_prec(t: TokenType) -> Prec {
+    fn get_prec(t: Token) -> Prec {
         match t {
-            TokenType::Number => Prec::Expr,
-            TokenType::Plus => Prec::AddSub,
-            TokenType::Minus => Prec::AddSub,
-            TokenType::Star => Prec::MultDiv,
-            TokenType::Slash => Prec::MultDiv,
+            Token::Number(_) => Prec::Expr,
+            Token::Plus => Prec::AddSub,
+            Token::Minus => Prec::AddSub,
+            Token::Star => Prec::MultDiv,
+            Token::Slash => Prec::MultDiv,
             _ => Prec::Bottom,
         }
     }
