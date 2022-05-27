@@ -1,6 +1,3 @@
-use std::vec::IntoIter;
-use std::iter::Peekable;
-
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType { // Unify TokenType and Token???
     Plus,
@@ -14,66 +11,89 @@ pub enum TokenType { // Unify TokenType and Token???
 use TokenType::*;
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Token {
+pub struct Token<'a> {
     pub token_type: TokenType,
-    pub chars: String
+    pub chars: &'a str
 }
 
 #[derive(Debug)]
-pub struct Scanner {
-    source: Peekable<IntoIter<(usize, char)>>,
+pub struct Scanner<'a> {
+    source: &'a str,
+    position: usize,
 }
 
-impl Scanner {
-    pub fn new(source: &str) -> Self {
+impl<'a> Scanner<'a> {
+    pub fn new(source: &'a str) -> Self {
         Scanner{
-            source: source.char_indices().collect::<Vec<_>>().into_iter().peekable(),
+            source: source,
+            position: 0,
         }
     }
 
-    fn number(&mut self, c: char) -> Option<Token> {
-        let mut number_string: String = c.to_string();
-        while is_digit(self.source.peek()?.1) {
-            number_string.push(self.source.next()?.1);
+    fn number(&mut self) -> Option<Token<'a>> {
+         // we already advanced the position during Iterator::next(),
+         // so decrement by one
+        let start_index = self.position - 1;
+
+        while Self::is_digit(self.peek().unwrap_or("_") /* "_" isn't a number */) {
+            self.position += 1;
         }
-        return Some(Token{token_type: Number, chars: number_string});
+
+        Some(Token{token_type: Number, chars: self.source.get(start_index..self.position)?})
+    }
+
+    fn next_char(&mut self) -> Option<&'a str> {
+        if self.position >= self.source.len() {
+            None
+        } else {
+            self.position += 1;
+            self.source.get(self.position - 1..self.position)
+        }
+    }
+
+    fn peek(&self) -> Option<&'a str> {
+        if self.position >= self.source.len() {
+            None
+        } else {
+            self.source.get(self.position..self.position + 1)
+        }
+    }
+
+    pub fn is_digit(s: &'a str) -> bool {
+        "0123456789".contains(s)
+    }
+
+    pub fn is_whitespace(s: &'a str) -> bool {
+        " \t\n".contains(s)
+    }
+
+    pub fn make_token(token_type: TokenType, chars: &'a str) -> Token {
+        Token{token_type: token_type, chars: chars}
     }
 
 }
 
-impl Iterator for Scanner {
-    type Item = Token;
+impl<'a> Iterator for Scanner<'a> {
+    type Item = Token<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            let c = self.source.next()?.1;
+            let c = self.next_char()?;
             match c {
-                c if is_whitespace(c) => { continue; }
-                c if is_digit(c) => {
-                    return self.number(c)
+                c if Scanner::is_whitespace(c) => { continue; }
+                c if Scanner::is_digit(c) => {
+                    return self.number()
                 },
-                '+' => return Some(make_token(Plus, "+")),
-                '-' => return Some(make_token(Minus, "-")),
-                '*' => return Some(make_token(Star, "*")),
-                '/' => return Some(make_token(Slash, "/")),
-                '(' => return Some(make_token(LParen, "(")),
-                ')' => return Some(make_token(RParen, ")")),
+                "+" => return Some(Scanner::make_token(Plus, c)),
+                "-" => return Some(Scanner::make_token(Minus, c)),
+                "*" => return Some(Scanner::make_token(Star, c)),
+                "/" => return Some(Scanner::make_token(Slash, c)),
+                "(" => return Some(Scanner::make_token(LParen, c)),
+                ")" => return Some(Scanner::make_token(RParen, c)),
                 _ => return None,
             };
         }
     }
-}
-
-fn is_digit(c: char) -> bool {
-    "0123456789".contains(c)
-}
-
-fn is_whitespace(c: char) -> bool {
-    " \t\n".contains(c)
-}
-
-pub fn make_token(token_type: TokenType, chars: &str) -> Token {
-    Token{token_type: token_type, chars: chars.to_string()}
 }
 
 #[cfg(test)]
@@ -91,7 +111,7 @@ mod test {
     fn numbers() {
         let tokens = Scanner::new("1124\n").collect::<Vec<_>>();
 
-        assert_eq!(tokens, vec![make_token(Number, "1124")]);
+        assert_eq!(tokens, vec![Scanner::make_token(Number, "1124")]);
     }
 
     #[test]
@@ -99,10 +119,10 @@ mod test {
         let tokens = Scanner::new("* - + /\n").collect::<Vec<_>>();
 
         assert_eq!(tokens, vec![
-            make_token(Star, "*"),
-            make_token(Minus, "-"),
-            make_token(Plus, "+"),
-            make_token(Slash, "/"),
+            Scanner::make_token(Star, "*"),
+            Scanner::make_token(Minus, "-"),
+            Scanner::make_token(Plus, "+"),
+            Scanner::make_token(Slash, "/"),
         ]);
     }
 }

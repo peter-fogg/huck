@@ -15,11 +15,7 @@ fn main() {
 }
 
 fn parse_file(text: String) {
-    // this is a monstrosity tbh
-    let tokens = scanner::Scanner::new(&text)
-        .collect::<Vec<_>>()
-        .into_iter()
-        .peekable();
+    let tokens = scanner::Scanner::new(&text).peekable();
 
     let mut p = parser::Parser::new(tokens);
 

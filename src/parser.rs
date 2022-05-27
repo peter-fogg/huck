@@ -1,6 +1,5 @@
-use crate::scanner::{TokenType, Token};
-use std::iter::Peekable;
-use std::vec::IntoIter;
+use crate::scanner::{Scanner, TokenType, Token};
+use std::iter::{Iterator, Peekable};
 
 #[derive(Debug, PartialEq)]
 pub enum HuckAst {
@@ -39,20 +38,20 @@ impl Prec {
     }
 }
 
-type TokenStream = Peekable<IntoIter<Token>>;
+type TokenStream<'a> = Peekable<Scanner<'a>>;
 
 type ParseResult = Result<HuckAst, ParseError>;
 
-type PrefixRule = fn(&mut Parser, token: Token) -> ParseResult;
+type PrefixRule<'a> = fn(&mut Parser<'a>, token: Token<'a>) -> ParseResult;
 
-type InfixRule = fn(&mut Parser, token: Token, lhs: HuckAst) -> ParseResult;
+type InfixRule<'a> = fn(&mut Parser<'a>, token: Token<'a>, lhs: HuckAst) -> ParseResult;
 
-pub struct Parser {
-    tokens: TokenStream,
+pub struct Parser<'a> {
+    tokens: TokenStream<'a>,
 }
 
-impl Parser {
-    pub fn new(tokens: TokenStream) -> Self {
+impl<'a> Parser<'a> {
+    pub fn new(tokens: TokenStream<'a>) -> Self {
         Self { tokens: tokens }
     }
 
@@ -95,23 +94,23 @@ impl Parser {
         Ok(f(Box::new(lhs), Box::new(rhs)))
     }
 
-    fn plus(&mut self, _token: Token, lhs: HuckAst) -> ParseResult {
+    fn plus(&mut self, _token: Token<'a>, lhs: HuckAst) -> ParseResult {
         self.binary(HuckAst::Plus, Prec::AddSub, lhs)
     }
 
-    fn minus(&mut self, _token: Token, lhs: HuckAst) -> ParseResult {
+    fn minus(&mut self, _token: Token<'a>, lhs: HuckAst) -> ParseResult {
         self.binary(HuckAst::Minus, Prec::AddSub, lhs)
     }
 
-    fn times(&mut self, _token: Token, lhs: HuckAst) -> ParseResult {
+    fn times(&mut self, _token: Token<'a>, lhs: HuckAst) -> ParseResult {
         self.binary(HuckAst::Times, Prec::MultDiv, lhs)
     }
 
-    fn div(&mut self, _token: Token, lhs: HuckAst) -> ParseResult {
+    fn div(&mut self, _token: Token<'a>, lhs: HuckAst) -> ParseResult {
         self.binary(HuckAst::Div, Prec::MultDiv, lhs)
     }
 
-    fn grouping(&mut self, _token: Token) -> ParseResult {
+    fn grouping(&mut self, _token: Token<'a>) -> ParseResult {
         let grouping = self.parse_prec(Prec::Expr)?;
         self.consume(TokenType::RParen)?;
         Ok(grouping)
@@ -127,7 +126,7 @@ impl Parser {
         }
     }
 
-    fn get_infix_rule(t: TokenType) -> Result<InfixRule, ParseError> {
+    fn get_infix_rule(t: TokenType) -> Result<InfixRule<'a>, ParseError> {
         match t {
             TokenType::Plus => Ok(Self::plus),
             TokenType::Minus => Ok(Self::minus),
@@ -137,7 +136,7 @@ impl Parser {
         }
     }
     
-    fn get_prefix_rule(t: TokenType) -> Result<PrefixRule, ParseError> {
+    fn get_prefix_rule(t: TokenType) -> Result<PrefixRule<'a>, ParseError> {
         match t {
             TokenType::Number => Ok(Self::number),
             TokenType::LParen => Ok(Self::grouping),
@@ -160,32 +159,30 @@ impl Parser {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::scanner::{make_token, TokenType};
+    use crate::scanner::Scanner;
+
+    fn make_scanner(s: &str) -> Peekable<Scanner> {
+        Scanner::new(s).peekable()
+    }
 
     #[test]
     fn empty() {
-        let tokens = vec![].into_iter().peekable();
-        let parsed = Parser::new(tokens).parse();
+        let scanner = make_scanner("");
+        let parsed = Parser::new(scanner).parse();
         assert_eq!(parsed, Err(ParseError::Eof));
     }
 
     #[test]
     fn number() {
-        let tokens = vec![make_token(TokenType::Number, "42")].into_iter().peekable();
-        let parsed = Parser::new(tokens).parse();
+        let scanner = make_scanner("42");
+        let parsed = Parser::new(scanner).parse();
         assert_eq!(parsed, Ok(HuckAst::Num(42)));
     }
 
     #[test]
     fn arithmetic() {
-        let tokens = vec![
-            make_token(TokenType::Number, "1"),
-            make_token(TokenType::Minus, "-"),
-            make_token(TokenType::Number, "2"),
-            make_token(TokenType::Star, "*"),
-            make_token(TokenType::Number, "3"),
-        ].into_iter().peekable();
-        let parsed = Parser::new(tokens).parse();
+        let scanner = make_scanner("1 - 2 * 3");
+        let parsed = Parser::new(scanner).parse();
 
         assert_eq!(parsed, Ok(
             HuckAst::Minus(
@@ -200,16 +197,8 @@ mod test {
 
     #[test]
     fn grouping() {
-        let tokens = vec![
-            make_token(TokenType::LParen, "("),
-            make_token(TokenType::Number, "1"),
-            make_token(TokenType::Plus, "+"),
-            make_token(TokenType::Number, "2"),
-            make_token(TokenType::RParen, ")"),
-            make_token(TokenType::Slash, "/"),
-            make_token(TokenType::Number, "3"),
-        ].into_iter().peekable();
-        let parsed = Parser::new(tokens).parse();
+        let scanner = make_scanner("(1 + 2) / 3");
+        let parsed = Parser::new(scanner).parse();
 
         assert_eq!(parsed, Ok(
             HuckAst::Div(
@@ -224,29 +213,16 @@ mod test {
 
     #[test]
     fn nested_grouping() {
-        let tokens = vec![
-            make_token(TokenType::LParen, "("),
-            make_token(TokenType::LParen, "("),
-            make_token(TokenType::LParen, "("),
-            make_token(TokenType::Number, "420"),
-            make_token(TokenType::RParen, ")"),
-            make_token(TokenType::RParen, ")"),
-            make_token(TokenType::RParen, ")"),
-        ].into_iter().peekable();
-
+        let scanner = make_scanner("(((420)))");
         assert_eq!(
-            Parser::new(tokens).parse(),
+            Parser::new(scanner).parse(),
             Ok(HuckAst::Num(420))
         )
     }
 
     #[test]
     fn bad_grouping() {
-        let tokens = vec![
-            make_token(TokenType::LParen, "("),
-            make_token(TokenType::Number, "2580"),
-        ].into_iter().peekable();
-
-        assert!(Parser::new(tokens).parse().is_err())
+        let scanner = make_scanner("(2580");
+        assert!(Parser::new(scanner).parse().is_err())
     }
 }
