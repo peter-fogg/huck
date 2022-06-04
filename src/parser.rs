@@ -2,7 +2,7 @@ use crate::scanner::{Scanner, Token};
 use std::iter::{Iterator, Peekable};
 
 #[derive(Debug, PartialEq)]
-pub enum HuckAst {
+pub enum HuckAst { // Boxed to allow data recursion
     Num(u64),
     Plus(Box<HuckAst>, Box<HuckAst>),
     Minus(Box<HuckAst>, Box<HuckAst>),
@@ -26,6 +26,9 @@ enum Prec {
     Top
 }
 
+// TODO: better/more idiomatic way of doing this?  possibly look into
+// "custom discriminant values for fieldless enumerations" and
+// #[repr(u8)]
 impl Prec {
     pub fn next(p: Self) -> Self {
         match p {
@@ -56,16 +59,19 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parse(&mut self) -> ParseResult {
+        // Start parsing at lowest precendence
         self.parse_prec(Prec::Bottom)
     }
 
     fn parse_prec(&mut self, prec: Prec) -> ParseResult {
+        // If we're calling parse_prec, we expect there to be another token
         let t = self.tokens.next().ok_or(ParseError::Eof)?;
 
         let prefix_rule = Self::get_prefix_rule(t)?;
         let mut lhs = prefix_rule(self, t)?;
 
         let mut next_prec = self.tokens.peek().map(|next| Self::get_prec(*next));
+        // If the next precedence is equal or higher to the current precedence, recur
         while next_prec.is_some() && prec <= next_prec.unwrap() {
 
             let next = self.tokens.next().unwrap();

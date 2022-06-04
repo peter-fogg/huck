@@ -24,11 +24,13 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    // TODO: handle non-integers
     fn number(&mut self) -> Option<Token<'a>> {
-         // we already advanced the position during Iterator::next(),
+         // We already advanced the position during Iterator::next(),
          // so decrement by one
         let start_index = self.position - 1;
 
+        // Keep munching characters until we hit EOF or a non-number character
         while Self::is_digit(self.peek().unwrap_or("_") /* "_" isn't a number */) {
             self.position += 1;
         }
@@ -36,15 +38,19 @@ impl<'a> Scanner<'a> {
         Some(Number(self.source.get(start_index..self.position)?))
     }
 
+    // Get the next character, if it exists, and advance the scanner
     fn next_char(&mut self) -> Option<&'a str> {
+        // We're at the end
         if self.position >= self.source.len() {
             None
         } else {
+            // This always increments the position to the next character
             self.position += 1;
             self.source.get(self.position - 1..self.position)
         }
     }
 
+    // Get the next character, if it exists, without incrementing
     fn peek(&self) -> Option<&'a str> {
         if self.position >= self.source.len() {
             None
@@ -69,8 +75,8 @@ impl<'a> Iterator for Scanner<'a> {
         loop {
             let c = self.next_char()?;
             match c {
-                c if Scanner::is_whitespace(c) => { continue; }
-                c if Scanner::is_digit(c) => {
+                c if Self::is_whitespace(c) => { continue; } // Munch whitespace
+                c if Self::is_digit(c) => {
                     return self.number()
                 },
                 "+" => return Some(Plus),
