@@ -6,6 +6,8 @@ use parser::HuckAst;
 use std::env;
 use std::fs;
 
+use inkwell::builder::Builder;
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     let path = &args[1];
