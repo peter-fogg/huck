@@ -7,6 +7,10 @@ pub enum Token<'a> {
     Number(&'a str),
     RParen,
     LParen,
+    Let,
+    SingleEq,
+    Semicolon,
+    Var(&'a str),
 }
 use Token::*;
 
@@ -38,6 +42,24 @@ impl<'a> Scanner<'a> {
         Some(Number(self.source.get(start_index..self.position)?))
     }
 
+    fn identifier(&mut self) -> Option<Token<'a>> {
+        let start_index = self.position - 1;
+
+        while let Some(next_char) = self.peek() {
+            if Self::is_digit(next_char) || Self::is_alpha(next_char) {
+                self.position += 1;
+            }
+            else { break; }
+        }
+
+        let ident = self.source.get(start_index..self.position)?;
+
+        Some(match ident {
+            "let" => Let,
+            _ => Var(ident)
+        })
+    }
+
     // Get the next character, if it exists, and advance the scanner
     fn next_char(&mut self) -> Option<&'a str> {
         // We're at the end
@@ -63,6 +85,10 @@ impl<'a> Scanner<'a> {
         "0123456789".contains(s)
     }
 
+    pub fn is_alpha(s: &'a str) -> bool {
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_".contains(s)
+    }
+
     pub fn is_whitespace(s: &'a str) -> bool {
         " \t\n".contains(s)
     }
@@ -85,7 +111,9 @@ impl<'a> Iterator for Scanner<'a> {
                 "/" => return Some(Slash),
                 "(" => return Some(LParen),
                 ")" => return Some(RParen),
-                _ => return None,
+                "=" => return Some(SingleEq),
+                ";" => return Some(Semicolon),
+                _ => return self.identifier(),
             };
         }
     }
@@ -109,7 +137,13 @@ mod test {
 
     #[test]
     fn operators() {
-        let tokens = Scanner::new("* - + / ( )\n").collect::<Vec<_>>();
-        assert_eq!(tokens, vec![Star, Minus, Plus, Slash, LParen, RParen]);
+        let tokens = Scanner::new("= ; * - + / ( )\n").collect::<Vec<_>>();
+        assert_eq!(tokens, vec![SingleEq, Semicolon, Star, Minus, Plus, Slash, LParen, RParen]);
+    }
+
+    #[test]
+    fn identifiers() {
+        let tokens = Scanner::new(" ident let  ").collect::<Vec<_>>();
+        assert_eq!(tokens, vec![Var("ident"), Let]);
     }
 }
