@@ -1,12 +1,13 @@
 mod scanner;
 mod parser;
-
-use parser::HuckAst;
+mod codegen;
 
 use std::env;
 use std::fs;
+use std::path::Path;
 
-use inkwell::builder::Builder;
+use inkwell::context::Context;
+use inkwell::passes::PassManager;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -24,17 +25,28 @@ fn parse_file(text: String) {
     let mut p = parser::Parser::new(tokens);
 
     match p.parse() {
-        Ok(ast) => println!("{:?}", eval(ast)),
-        Err(err) => println!("Error: {:?}", err),
-    }
-}
+        Ok(ast) => {
+            let context = Context::create();
+            let module = context.create_module("huck_main");
+            let builder = context.create_builder();
 
-fn eval(ast: HuckAst) -> Option<u64> {
-    match ast {
-        HuckAst::Num(n) => Some(n),
-        HuckAst::Plus(l, r) => Some(eval(*l)? + eval(*r)?),
-        HuckAst::Minus(l, r) => Some(eval(*l)? - eval(*r)?),
-        HuckAst::Times(l, r) => Some(eval(*l)? * eval(*r)?),
-        HuckAst::Div(l, r) => Some(eval(*l)? / eval(*r)?),
+            let fpm = PassManager::create(&module);
+
+            codegen::Compiler::compile(
+                &context,
+                &builder,
+                &module,
+                &fpm,
+                ast
+            ).expect("Compilation error!");
+
+            let fname = "./huck.out";
+
+            match module.print_to_file(Path::new(fname)) {
+                Ok(_) => println!("LLVM IR written to {}", fname),
+                Err(_) => println!("Error writing IR!")
+            }
+        },
+        Err(err) => println!("Error: {:?}", err),
     }
 }
