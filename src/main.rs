@@ -40,7 +40,7 @@ fn parse_file(text: String) {
                 ast
             ).expect("Compilation error!");
 
-            let fname = "./huck.out";
+            let fname = "./huck.ll";
 
             match module.print_to_file(Path::new(fname)) {
                 Ok(_) => println!("LLVM IR written to {}", fname),

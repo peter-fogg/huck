@@ -34,7 +34,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub fn compile_main(&mut self, expr: HuckAst) -> Result<FunctionValue<'ctx>, &'static str> {
         let fn_type = self.context.i64_type().fn_type(&[], false);
-        let fn_val = self.module.add_function("huck_main", fn_type, None);
+        let fn_val = self.module.add_function("main", fn_type, None);
 
         let entry = self.context.append_basic_block(fn_val, "entry");
         self.builder.position_at_end(entry);
