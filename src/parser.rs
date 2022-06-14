@@ -8,6 +8,8 @@ pub enum HuckAst { // Boxed to allow data recursion
     Minus(Box<HuckAst>, Box<HuckAst>),
     Times(Box<HuckAst>, Box<HuckAst>),
     Div(Box<HuckAst>, Box<HuckAst>),
+//    Let(String, Box<HuckAst>),
+    Block(Vec<HuckAst>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -125,6 +127,22 @@ impl<'a> Parser<'a> {
         Ok(grouping)
     }
 
+    fn block(&mut self, _token: Token<'a>) -> ParseResult {
+        let mut exprs = vec![];
+        exprs.push(self.parse_prec(Prec::Expr)?);
+
+        let mut next = self.tokens.peek();
+
+        while next.is_some() && *next.unwrap() == Token::Semicolon {
+            self.consume(Token::Semicolon)?;
+            exprs.push(self.parse_prec(Prec::Expr)?);
+
+            next = self.tokens.peek();
+        }
+        self.consume(Token::RBrace)?;
+        Ok(HuckAst::Block(exprs))
+    }
+
     fn consume(&mut self, token: Token) -> Result<(), ParseError> {
         match self.tokens.peek() {
             Some(c) if *c == token => {
@@ -149,6 +167,7 @@ impl<'a> Parser<'a> {
         match t {
             Token::Number(_) => Ok(Self::number),
             Token::LParen => Ok(Self::grouping),
+            Token::LBrace => Ok(Self::block),
             _ => Err(ParseError::NotImplemented(format!("No prefix rule for token type {:?}", t))),
         }
     }

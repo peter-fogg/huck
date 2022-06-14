@@ -60,7 +60,7 @@ fn parse_file(text: String) {
                         println!("\n\n=> {}", f.call());
                     }
                 }
-                Err(_) => println!("Error compiling file!")
+                Err(err) => println!("Error compiling file: [{:?}]", err)
             }
         },
         Err(err) => println!("Error: {:?}", err),

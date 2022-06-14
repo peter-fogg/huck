@@ -74,6 +74,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                 Ok(self.builder.build_int_signed_div(lexpr, rexpr, "tmpdiv"))
             },
+            HuckAst::Block(exprs) => {
+                let mut result = Err("Empty block");
+                for expr in exprs {
+                    result = self.compile_expr(expr);
+                }
+                result
+            }
+            _ => Err("Not implemented yet!"),
         }
     }
 }

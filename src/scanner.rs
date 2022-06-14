@@ -7,6 +7,8 @@ pub enum Token<'a> {
     Number(&'a str),
     RParen,
     LParen,
+    RBrace,
+    LBrace,
     Let,
     SingleEq,
     Semicolon,
@@ -111,6 +113,8 @@ impl<'a> Iterator for Scanner<'a> {
                 "/" => return Some(Slash),
                 "(" => return Some(LParen),
                 ")" => return Some(RParen),
+                "{" => return Some(LBrace),
+                "}" => return Some(RBrace),
                 "=" => return Some(SingleEq),
                 ";" => return Some(Semicolon),
                 _ => return self.identifier(),
@@ -137,8 +141,8 @@ mod test {
 
     #[test]
     fn operators() {
-        let tokens = Scanner::new("= ; * - + / ( )\n").collect::<Vec<_>>();
-        assert_eq!(tokens, vec![SingleEq, Semicolon, Star, Minus, Plus, Slash, LParen, RParen]);
+        let tokens = Scanner::new("= ; * - + / ( ) { } \n").collect::<Vec<_>>();
+        assert_eq!(tokens, vec![SingleEq, Semicolon, Star, Minus, Plus, Slash, LParen, RParen, LBrace, RBrace]);
     }
 
     #[test]
