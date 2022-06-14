@@ -6,6 +6,7 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+use inkwell::OptimizationLevel;
 use inkwell::context::Context;
 use inkwell::passes::PassManager;
 
@@ -32,19 +33,34 @@ fn parse_file(text: String) {
 
             let fpm = PassManager::create(&module);
 
-            codegen::Compiler::compile(
+            match codegen::Compiler::compile(
                 &context,
                 &builder,
                 &module,
                 &fpm,
                 ast
-            ).expect("Compilation error!");
+            ) {
+                Ok(function) => {
+                    function.print_to_stderr();
+                    let fname = "./huck";
+                    match module.print_to_file(Path::new(fname).with_extension("ll")) {
+                        Ok(_) => println!("LLVM IR written to {}", fname),
+                        Err(_) => println!("Error writing IR!")
+                    }
 
-            let fname = "./huck.ll";
+                    let ee = module.create_jit_execution_engine(OptimizationLevel::None).unwrap();
 
-            match module.print_to_file(Path::new(fname)) {
-                Ok(_) => println!("LLVM IR written to {}", fname),
-                Err(_) => println!("Error writing IR!")
+                    let maybe_fn = unsafe {
+                        ee.get_function::<unsafe extern "C" fn() -> u64>("main")
+                    };
+
+                    let f = maybe_fn.expect("Error getting main function!");
+
+                    unsafe {
+                        println!("\n\n=> {}", f.call());
+                    }
+                }
+                Err(_) => println!("Error compiling file!")
             }
         },
         Err(err) => println!("Error: {:?}", err),

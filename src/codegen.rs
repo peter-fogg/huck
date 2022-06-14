@@ -77,3 +77,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         }
     }
 }
+
+#[no_mangle]
+pub extern "C" fn print_int() -> u64 {
+    let x = 123;
+    println!("{}", x);
+    x
+}
