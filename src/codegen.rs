@@ -90,7 +90,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 }
                 result
             }
-//            _ => Err("Not implemented yet!"),
+            _ => Err("Not implemented yet!"),
         }
     }
 }

@@ -8,7 +8,8 @@ pub enum HuckAst { // Boxed to allow data recursion
     Minus(Box<HuckAst>, Box<HuckAst>),
     Times(Box<HuckAst>, Box<HuckAst>),
     Div(Box<HuckAst>, Box<HuckAst>),
-//    Let(String, Box<HuckAst>),
+    Let(String, Box<HuckAst>),
+    VarRef(String),
     Block(Vec<HuckAst>),
 }
 
@@ -63,6 +64,10 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> ParseResult {
         // Start parsing at lowest precendence
         self.parse_prec(Prec::Bottom)
+    }
+
+    fn expression(&mut self) -> ParseResult {
+        self.parse_prec(Prec::Expr)
     }
 
     fn parse_prec(&mut self, prec: Prec) -> ParseResult {
@@ -122,25 +127,46 @@ impl<'a> Parser<'a> {
     }
 
     fn grouping(&mut self, _token: Token<'a>) -> ParseResult {
-        let grouping = self.parse_prec(Prec::Expr)?;
+        let grouping = self.expression()?;
         self.consume(Token::RParen)?;
         Ok(grouping)
     }
 
     fn block(&mut self, _token: Token<'a>) -> ParseResult {
         let mut exprs = vec![];
-        exprs.push(self.parse_prec(Prec::Expr)?);
+        exprs.push(self.expression()?);
 
         let mut next = self.tokens.peek();
 
         while next.is_some() && *next.unwrap() == Token::Semicolon {
             self.consume(Token::Semicolon)?;
-            exprs.push(self.parse_prec(Prec::Expr)?);
+            exprs.push(self.expression()?);
 
             next = self.tokens.peek();
         }
         self.consume(Token::RBrace)?;
         Ok(HuckAst::Block(exprs))
+    }
+
+    fn let_decl(&mut self, _token: Token<'a>) -> ParseResult {
+        let ident = match self.tokens.next() {
+            Some(Token::Var(ident)) => Ok(ident),
+            Some(t) => Err(ParseError::Fucked(format!("Expected identifier, found {:?}", t))),
+            None => Err(ParseError::Eof),
+        }?;
+
+        self.consume(Token::SingleEq)?;
+
+        let expr = self.expression()?;
+
+        Ok(HuckAst::Let(ident.to_string(), Box::new(expr)))
+    }
+
+    fn var_ref(&mut self, token: Token<'a>) -> ParseResult {
+        match token {
+            Token::Var(ident) => Ok(HuckAst::VarRef(ident.to_string())),
+            _ => Err(ParseError::Fucked("Expected variable reference".to_string()))
+        }
     }
 
     fn consume(&mut self, token: Token) -> Result<(), ParseError> {
@@ -168,6 +194,8 @@ impl<'a> Parser<'a> {
             Token::Number(_) => Ok(Self::number),
             Token::LParen => Ok(Self::grouping),
             Token::LBrace => Ok(Self::block),
+            Token::Let => Ok(Self::let_decl),
+            Token::Var(_) => Ok(Self::var_ref),
             _ => Err(ParseError::NotImplemented(format!("No prefix rule for token type {:?}", t))),
         }
     }
@@ -189,6 +217,8 @@ mod test {
     use super::*;
     use crate::scanner::Scanner;
 
+    use crate::parser::HuckAst::*;
+
     fn make_scanner(s: &str) -> Peekable<Scanner> {
         Scanner::new(s).peekable()
     }
@@ -204,7 +234,29 @@ mod test {
     fn number() {
         let scanner = make_scanner("42");
         let parsed = Parser::new(scanner).parse();
-        assert_eq!(parsed, Ok(HuckAst::Num(42)));
+        assert_eq!(parsed, Ok(Num(42)));
+    }
+
+    #[test]
+    fn let_decl() {
+        let scanner = make_scanner("let var_name = 5");
+        let parsed = Parser::new(scanner).parse();
+        assert_eq!(parsed, Ok(Let("var_name".to_string(), Box::new(Num(5)))));
+    }
+
+    #[test]
+    fn block() {
+        let scanner = make_scanner("{let x = 42; x + 1}");
+        let parsed = Parser::new(scanner).parse();
+        assert_eq!(parsed, Ok(
+            Block(vec![
+                Let("x".to_string(), Box::new(Num(42))),
+                Plus(
+                    Box::new(VarRef("x".to_string())),
+                    Box::new(Num(1))
+                ),
+            ])
+        ));
     }
 
     #[test]
@@ -213,11 +265,11 @@ mod test {
         let parsed = Parser::new(scanner).parse();
 
         assert_eq!(parsed, Ok(
-            HuckAst::Minus(
-                Box::new(HuckAst::Num(1)),
-                Box::new(HuckAst::Times(
-                    Box::new(HuckAst::Num(2)),
-                    Box::new(HuckAst::Num(3))
+            Minus(
+                Box::new(Num(1)),
+                Box::new(Times(
+                    Box::new(Num(2)),
+                    Box::new(Num(3))
                 ))
             )
         ));
@@ -229,12 +281,12 @@ mod test {
         let parsed = Parser::new(scanner).parse();
 
         assert_eq!(parsed, Ok(
-            HuckAst::Div(
-                Box::new(HuckAst::Plus(
-                    Box::new(HuckAst::Num(1)),
-                    Box::new(HuckAst::Num(2))
+            Div(
+                Box::new(Plus(
+                    Box::new(Num(1)),
+                    Box::new(Num(2))
                 )),
-                Box::new(HuckAst::Num(3))
+                Box::new(Num(3))
             )
         ));
     }
@@ -244,7 +296,7 @@ mod test {
         let scanner = make_scanner("(((420)))");
         assert_eq!(
             Parser::new(scanner).parse(),
-            Ok(HuckAst::Num(420))
+            Ok(Num(420))
         )
     }
 
