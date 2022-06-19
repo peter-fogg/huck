@@ -5,8 +5,8 @@ mod codegen;
 use std::env;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
-use inkwell::OptimizationLevel;
 use inkwell::context::Context;
 use inkwell::passes::PassManager;
 
@@ -33,6 +33,8 @@ fn parse_file(text: String) {
 
             let fpm = PassManager::create(&module);
 
+            // This code really needs some cleaning up but I just want
+            // it to work for now
             match codegen::Compiler::compile(
                 &context,
                 &builder,
@@ -43,22 +45,35 @@ fn parse_file(text: String) {
                 Ok(function) => {
                     function.print_to_stderr();
                     let fname = "./huck";
-                    match module.print_to_file(Path::new(fname).with_extension("ll")) {
-                        Ok(_) => println!("LLVM IR written to {}", fname),
+                    let path = Path::new(fname).with_extension("ll");
+                    // god what a hack
+                    let stdlib_path = "/home/pfogg/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/libstd-05b39ac0cb4c5688.so";
+                    match module.print_to_file(&path) {
+                        Ok(_) => {
+                            println!("LLVM IR written to {}", fname);
+
+                            let output_result = Command::new("clang")
+                                .arg(&path)
+                                .arg("runtime.o")
+                                .arg("-o")
+                                .arg("hucktest")
+                                .arg(stdlib_path)
+                                .output();
+                            match output_result {
+                                Ok(output) => {
+                                    let status = output.status;
+                                    if status.success() {
+                                        println!("Successfully linked!");
+                                    } else {
+                                        println!("Linker error: {}", std::str::from_utf8(&output.stderr).unwrap());
+                                    }
+                                },
+                                Err(err) => println!("Failure of linking: {}", err),
+                            }
+                        },
                         Err(_) => println!("Error writing IR!")
                     }
 
-                    let ee = module.create_jit_execution_engine(OptimizationLevel::None).unwrap();
-
-                    let maybe_fn = unsafe {
-                        ee.get_function::<unsafe extern "C" fn() -> u64>("main")
-                    };
-
-                    let f = maybe_fn.expect("Error getting main function!");
-
-                    unsafe {
-                        println!("\n\n=> {}", f.call());
-                    }
                 }
                 Err(err) => println!("Error compiling file: [{:?}]", err)
             }
