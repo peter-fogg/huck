@@ -133,11 +133,10 @@ impl<'a> Parser<'a> {
     }
 
     fn block(&mut self, _token: Token<'a>) -> ParseResult {
-        let mut exprs = vec![];
-        exprs.push(self.expression()?);
-
+        let mut exprs = vec![self.expression()?];
         let mut next = self.tokens.peek();
 
+        // There's probably a better way to do this pattern
         while next.is_some() && *next.unwrap() == Token::Semicolon {
             self.consume(Token::Semicolon)?;
             exprs.push(self.expression()?);
