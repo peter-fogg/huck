@@ -7,3 +7,12 @@ edition = "2021"
 
 [dependencies]
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm6-0"] }
+
+[[bin]]
+name = "huck"
+path = "src/main.rs"
+
+[lib]
+name = "runtime"
+path = "src/runtime.rs"
+crate-type = ["staticlib"]

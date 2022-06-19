@@ -34,12 +34,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub fn compile_main(&mut self, expr: HuckAst) -> Result<FunctionValue<'ctx>, &'static str> {
         let fn_type = self.context.i64_type().fn_type(&[], false);
+
+        // try calling print_int
+        let print_fn_type = self.context.void_type().fn_type(&[self.context.i64_type().into()], false);
+        let print_int = self.module.add_function("print_int", print_fn_type, None);
+        
+        // end call
+
         let fn_val = self.module.add_function("main", fn_type, None);
 
         let entry = self.context.append_basic_block(fn_val, "entry");
         self.builder.position_at_end(entry);
 
         let body = self.compile_expr(expr)?;
+        self.builder.build_call(print_int, &[body.into()], "tmp").try_as_basic_value();
+
         self.builder.build_return(Some(&body));
 
         Ok(fn_val)
@@ -84,11 +93,4 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             _ => Err("Not implemented yet!"),
         }
     }
-}
-
-#[no_mangle]
-pub extern "C" fn print_int() -> u64 {
-    let x = 123;
-    println!("{}", x);
-    x
 }
