@@ -1,10 +1,14 @@
 mod scanner;
 mod parser;
-
-use parser::HuckAst;
+mod codegen;
 
 use std::env;
 use std::fs;
+use std::path::Path;
+use std::process::Command;
+
+use inkwell::context::Context;
+use inkwell::passes::PassManager;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -22,17 +26,58 @@ fn parse_file(text: String) {
     let mut p = parser::Parser::new(tokens);
 
     match p.parse() {
-        Ok(ast) => println!("{:?}", eval(ast)),
-        Err(err) => println!("Error: {:?}", err),
-    }
-}
+        Ok(ast) => {
+            let context = Context::create();
+            let module = context.create_module("huck_main");
+            let builder = context.create_builder();
 
-fn eval(ast: HuckAst) -> Option<u64> {
-    match ast {
-        HuckAst::Num(n) => Some(n),
-        HuckAst::Plus(l, r) => Some(eval(*l)? + eval(*r)?),
-        HuckAst::Minus(l, r) => Some(eval(*l)? - eval(*r)?),
-        HuckAst::Times(l, r) => Some(eval(*l)? * eval(*r)?),
-        HuckAst::Div(l, r) => Some(eval(*l)? / eval(*r)?),
+            let fpm = PassManager::create(&module);
+
+            // This code really needs some cleaning up but I just want
+            // it to work for now
+            match codegen::Compiler::compile(
+                &context,
+                &builder,
+                &module,
+                &fpm,
+                ast
+            ) {
+                Ok(function) => {
+                    function.print_to_stderr();
+                    let fname = "./huck";
+                    let path = Path::new(fname).with_extension("ll");
+                    // god what a hack
+                    let stdlib_path = "/home/pfogg/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/libstd-05b39ac0cb4c5688.so";
+                    match module.print_to_file(&path) {
+                        Ok(_) => {
+                            println!("LLVM IR written to {}", fname);
+
+                            let output_result = Command::new("clang")
+                                .arg(&path)
+                                .arg("runtime.o")
+                                .arg("-o")
+                                .arg("hucktest")
+                                .arg(stdlib_path)
+                                .output();
+                            match output_result {
+                                Ok(output) => {
+                                    let status = output.status;
+                                    if status.success() {
+                                        println!("Successfully linked!");
+                                    } else {
+                                        println!("Linker error: {}", std::str::from_utf8(&output.stderr).unwrap());
+                                    }
+                                },
+                                Err(err) => println!("Failure of linking: {}", err),
+                            }
+                        },
+                        Err(_) => println!("Error writing IR!")
+                    }
+
+                }
+                Err(err) => println!("Error compiling file: [{:?}]", err)
+            }
+        },
+        Err(err) => println!("Error: {:?}", err),
     }
 }
