@@ -1,16 +1,19 @@
 use crate::parser::HuckAst;
 
+use std::collections::HashMap;
+
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::passes::PassManager;
-use inkwell::values::{FunctionValue, IntValue};
+use inkwell::values::{FunctionValue, IntValue, PointerValue};
 
 pub struct Compiler<'a, 'ctx> {
     pub context: &'ctx Context,
     pub builder: &'a Builder<'ctx>,
     pub module: &'a Module<'ctx>,
-    pub fpm: &'a PassManager<FunctionValue<'ctx>>
+    pub fpm: &'a PassManager<FunctionValue<'ctx>>,
+    env: HashMap<String, PointerValue<'ctx>>
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -27,6 +30,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             builder,
             module,
             fpm,
+            env: HashMap::new()
         };
 
         compiler.compile_main(expr)
@@ -52,6 +56,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_return(Some(&body));
 
         Ok(fn_val)
+    }
+
+    fn compile_let(&mut self, ident: String, init_expr: HuckAst) -> Result<IntValue<'ctx>, &'static str> {
+        let init_val = self.compile_expr(init_expr)?;
+        let allocation = self.allocate_var(&ident);
+        self.builder.build_store(allocation, init_val);
+        self.env.insert(ident, allocation);
+        Ok(init_val)
+    }
+
+    fn compile_var_ref(&mut self, ident: String) -> Result<IntValue<'ctx>, &'static str> {
+        match self.env.get(&ident) {
+            Some(allocation) => {
+                Ok(self.builder.build_load(*allocation, "load").into_int_value())
+            },
+            None => Err("identifier not found")
+        }
+
     }
 
     fn compile_expr(&mut self, expr: HuckAst) -> Result<IntValue<'ctx>, &'static str> {
@@ -89,8 +111,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     result = self.compile_expr(expr);
                 }
                 result
-            }
-            _ => Err("Not implemented yet!"),
+            },
+            HuckAst::Let(ident, init_expr) => self.compile_let(ident, *init_expr),
+            HuckAst::VarRef(ident) => self.compile_var_ref(ident),
         }
+    }
+
+    fn allocate_var(&self, ident: &str) -> PointerValue<'ctx> {
+        let builder = self.context.create_builder();
+
+        let fn_val = self.module.get_function("main").unwrap();
+
+        let entry = fn_val.get_first_basic_block().unwrap();
+
+        match entry.get_first_instruction() {
+            Some(first_instr) => builder.position_before(&first_instr),
+            None => builder.position_at_end(entry),
+        }
+
+        builder.build_alloca(self.context.i64_type(), ident)
     }
 }
