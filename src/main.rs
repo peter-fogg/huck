@@ -25,59 +25,42 @@ fn parse_file(text: String) {
 
     let mut p = parser::Parser::new(tokens);
 
-    match p.parse() {
-        Ok(ast) => {
-            let context = Context::create();
-            let module = context.create_module("huck_main");
-            let builder = context.create_builder();
+    let ast = p.parse().expect("Error parsing AST!");
+    let context = Context::create();
+    let module = context.create_module("huck_main");
+    let builder = context.create_builder();
 
-            let fpm = PassManager::create(&module);
+    let fpm = PassManager::create(&module);
 
-            // This code really needs some cleaning up but I just want
-            // it to work for now
-            match codegen::Compiler::compile(
-                &context,
-                &builder,
-                &module,
-                &fpm,
-                ast
-            ) {
-                Ok(function) => {
-                    function.print_to_stderr();
-                    let fname = "./huck";
-                    let path = Path::new(fname).with_extension("ll");
-                    // god what a hack
-                    let stdlib_path = "/home/pfogg/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/libstd-05b39ac0cb4c5688.so";
-                    match module.print_to_file(&path) {
-                        Ok(_) => {
-                            println!("LLVM IR written to {}", fname);
+    // This code really needs some cleaning up but I just want
+    // it to work for now
+    let function = codegen::Compiler::compile(
+        &context,
+        &builder,
+        &module,
+        &fpm,
+        ast
+    ).unwrap();
+    function.print_to_stderr();
+    let fname = "./huck";
+    let path = Path::new(fname).with_extension("ll");
+    // god what a hack
+    let stdlib_path = "/home/pfogg/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/libstd-05b39ac0cb4c5688.so";
+    module.print_to_file(&path).expect("Error writing IR!");
+    println!("LLVM IR written to {}", fname);
 
-                            let output_result = Command::new("clang")
-                                .arg(&path)
-                                .arg("runtime.o")
-                                .arg("-o")
-                                .arg("hucktest")
-                                .arg(stdlib_path)
-                                .output();
-                            match output_result {
-                                Ok(output) => {
-                                    let status = output.status;
-                                    if status.success() {
-                                        println!("Successfully linked!");
-                                    } else {
-                                        println!("Linker error: {}", std::str::from_utf8(&output.stderr).unwrap());
-                                    }
-                                },
-                                Err(err) => println!("Failure of linking: {}", err),
-                            }
-                        },
-                        Err(_) => println!("Error writing IR!")
-                    }
-
-                }
-                Err(err) => println!("Error compiling file: [{:?}]", err)
-            }
-        },
-        Err(err) => println!("Error: {:?}", err),
+    let output = Command::new("clang")
+        .arg(&path)
+        .arg("runtime.o")
+        .arg("-o")
+        .arg("hucktest")
+        .arg(stdlib_path)
+        .output()
+        .unwrap();
+    let status = output.status;
+    if status.success() {
+        println!("Successfully linked!");
+    } else {
+        println!("Linker error: {}", std::str::from_utf8(&output.stderr).unwrap());
     }
 }
