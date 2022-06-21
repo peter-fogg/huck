@@ -16,6 +16,8 @@ pub struct Compiler<'a, 'ctx> {
     env: HashMap<String, PointerValue<'ctx>>
 }
 
+type CompileResult<T> = Result<T, String>;
+
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub fn compile (
@@ -24,7 +26,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         module: &'a Module<'ctx>,
         fpm: &'a PassManager<FunctionValue<'ctx>>,
         expr: HuckAst,
-    ) -> Result<FunctionValue<'ctx>, &'static str> {
+    ) -> CompileResult<FunctionValue<'ctx>> {
         let mut compiler = Self {
             context,
             builder,
@@ -36,7 +38,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         compiler.compile_main(expr)
     }
 
-    pub fn compile_main(&mut self, expr: HuckAst) -> Result<FunctionValue<'ctx>, &'static str> {
+    pub fn compile_main(&mut self, expr: HuckAst) -> CompileResult<FunctionValue<'ctx>> {
         let fn_type = self.context.i64_type().fn_type(&[], false);
 
         // try calling print_int
@@ -58,7 +60,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Ok(fn_val)
     }
 
-    fn compile_let(&mut self, ident: String, init_expr: HuckAst) -> Result<IntValue<'ctx>, &'static str> {
+    fn compile_let(&mut self, ident: String, init_expr: HuckAst) -> CompileResult<IntValue<'ctx>> {
         let init_val = self.compile_expr(init_expr)?;
         let allocation = self.allocate_var(&ident);
         self.builder.build_store(allocation, init_val);
@@ -66,17 +68,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Ok(init_val)
     }
 
-    fn compile_var_ref(&mut self, ident: String) -> Result<IntValue<'ctx>, &'static str> {
+    fn compile_var_ref(&mut self, ident: String) -> CompileResult<IntValue<'ctx>> {
         match self.env.get(&ident) {
             Some(allocation) => {
                 Ok(self.builder.build_load(*allocation, "load").into_int_value())
             },
-            None => Err("identifier not found")
+            None => Err(format!("identifier \"{}\" not found", ident))
         }
 
     }
 
-    fn compile_expr(&mut self, expr: HuckAst) -> Result<IntValue<'ctx>, &'static str> {
+    fn compile_expr(&mut self, expr: HuckAst) -> CompileResult<IntValue<'ctx>> {
         match expr {
             HuckAst::Num(n) => {
                 Ok(self.context.i64_type().const_int(n, false))
@@ -106,7 +108,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Ok(self.builder.build_int_signed_div(lexpr, rexpr, "tmpdiv"))
             },
             HuckAst::Block(exprs) => {
-                let mut result = Err("Empty block");
+                let mut result = Err(String::from("Empty block"));
                 for expr in exprs {
                     result = self.compile_expr(expr);
                 }
