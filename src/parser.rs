@@ -46,7 +46,7 @@ impl Prec {
 
 type TokenStream<'a> = Peekable<Scanner<'a>>;
 
-type ParseOutput = HuckAst<()>;
+pub type ParseOutput = HuckAst<()>;
 
 type ParseResult = Result<ParseOutput, ParseError>;
 

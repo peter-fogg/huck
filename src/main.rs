@@ -1,6 +1,7 @@
 mod scanner;
 mod parser;
 mod codegen;
+mod typecheck;
 
 use std::env;
 use std::fs;
@@ -26,6 +27,8 @@ fn parse_file(text: String) {
     let mut p = parser::Parser::new(tokens);
 
     let ast = p.parse().expect("Error parsing AST!");
+    let checked_ast = typecheck::check(ast).expect("Typechecking error!");
+
     let context = Context::create();
     let module = context.create_module("huck_main");
     let builder = context.create_builder();
@@ -39,7 +42,7 @@ fn parse_file(text: String) {
         &builder,
         &module,
         &fpm,
-        ast
+        checked_ast
     ).unwrap();
     function.print_to_stderr();
     let fname = "./huck";

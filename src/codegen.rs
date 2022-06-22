@@ -1,4 +1,5 @@
 use crate::parser::HuckAst;
+use crate::typecheck::CheckOutput;
 
 use std::collections::HashMap;
 
@@ -16,7 +17,7 @@ pub struct Compiler<'a, 'ctx> {
     env: HashMap<String, PointerValue<'ctx>>
 }
 
-type CompileInput = HuckAst<()>;
+type CompileInput = CheckOutput;
 
 type CompileResult<T> = Result<T, String>;
 
