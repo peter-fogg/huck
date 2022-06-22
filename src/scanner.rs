@@ -5,6 +5,8 @@ pub enum Token<'a> {
     Star,
     Slash,
     Number(&'a str),
+    True,
+    False,
     RParen,
     LParen,
     RBrace,
@@ -13,6 +15,8 @@ pub enum Token<'a> {
     SingleEq,
     Semicolon,
     Var(&'a str),
+    If,
+    Else,
 }
 use Token::*;
 
@@ -58,6 +62,10 @@ impl<'a> Scanner<'a> {
 
         Some(match ident {
             "let" => Let,
+            "true" => True,
+            "false" => False,
+            "if" => If,
+            "else" => Else,
             _ => Var(ident)
         })
     }
@@ -147,7 +155,7 @@ mod test {
 
     #[test]
     fn identifiers() {
-        let tokens = Scanner::new(" ident let  ").collect::<Vec<_>>();
-        assert_eq!(tokens, vec![Var("ident"), Let]);
+        let tokens = Scanner::new("true if ident let else false ").collect::<Vec<_>>();
+        assert_eq!(tokens, vec![True, If, Var("ident"), Let, Else, False]);
     }
 }

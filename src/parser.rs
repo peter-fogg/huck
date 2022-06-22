@@ -4,6 +4,7 @@ use std::iter::{Iterator, Peekable};
 #[derive(Debug, PartialEq)]
 pub enum HuckAst<T> { // Boxed to allow data recursion
     Num(u64, T),
+    BoolLit(bool, T),
     Plus(Box<HuckAst<T>>, Box<HuckAst<T>>, T),
     Minus(Box<HuckAst<T>>, Box<HuckAst<T>>, T),
     Times(Box<HuckAst<T>>, Box<HuckAst<T>>, T),
@@ -11,6 +12,24 @@ pub enum HuckAst<T> { // Boxed to allow data recursion
     Let(String, Box<HuckAst<T>>, T),
     VarRef(String, T),
     Block(Vec<HuckAst<T>>, T),
+    If(Box<HuckAst<T>>, Box<HuckAst<T>>, Box<HuckAst<T>>, T),
+}
+
+impl<T> HuckAst<T> {
+    pub fn get_metadata(&self) -> &T {
+        match self {
+            Self::Num(_, t) => t,
+            Self::BoolLit(_, t) => t,
+            Self::Plus(_, _, t) => t,
+            Self::Minus(_, _, t) => t,
+            Self::Times(_, _, t) => t,
+            Self::Div(_, _, t) => t,
+            Self::Let(_, _, t) => t,
+            Self::VarRef(_, t) => t,
+            Self::Block(_, t) => t,
+            Self::If(_, _, _, t) => t,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -46,7 +65,7 @@ impl Prec {
 
 type TokenStream<'a> = Peekable<Scanner<'a>>;
 
-type ParseOutput = HuckAst<()>;
+pub type ParseOutput = HuckAst<()>;
 
 type ParseResult = Result<ParseOutput, ParseError>;
 
@@ -82,7 +101,6 @@ impl<'a> Parser<'a> {
         let mut next_prec = self.tokens.peek().map(|next| Self::get_prec(*next));
         // If the next precedence is equal or higher to the current precedence, recur
         while next_prec.is_some() && prec <= next_prec.unwrap() {
-
             let next = self.tokens.next().unwrap();
 
             let infix_rule = Self::get_infix_rule(next)?;
@@ -150,7 +168,8 @@ impl<'a> Parser<'a> {
             next = self.tokens.peek();
         }
         self.consume(Token::RBrace)?;
-        Ok(HuckAst::Block(exprs, ()))
+        let res = HuckAst::Block(exprs, ());
+        Ok(res)
     }
 
     fn let_decl(&mut self, _token: Token<'a>) -> ParseResult {
@@ -174,13 +193,32 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn bool_lit(&mut self, token: Token<'a>) -> ParseResult {
+        match token {
+            Token::True => Ok(HuckAst::BoolLit(true, ())),
+            Token::False => Ok(HuckAst::BoolLit(false, ())),
+            _ => Err(ParseError::Fucked(format!("Bad boolean literal {:?}", token))),
+        }
+    }
+
+    fn conditional(&mut self, token: Token<'a>) -> ParseResult {
+        let test = self.expression()?;
+        self.consume(Token::LBrace)?;
+        let true_branch = self.block(token)?;
+        self.consume(Token::Else)?;
+        self.consume(Token::LBrace)?;
+        let else_branch = self.block(token)?;
+        Ok(HuckAst::If(Box::new(test), Box::new(true_branch), Box::new(else_branch), ()))
+    }
+
     fn consume(&mut self, token: Token) -> Result<(), ParseError> {
         match self.tokens.peek() {
-            Some(c) if *c == token => {
-                _ = self.tokens.next();
+            Some(t) if *t == token => {
+                let _ = self.tokens.next();
                 Ok(())
             },
-            _ => Err(ParseError::Fucked(format!("Expected token {:?}", token))),
+            Some(t) => Err(ParseError::Fucked(format!("Expected token {:?}, found {:?}", token, t))),
+            _ => Err(ParseError::Eof),
         }
     }
 
@@ -196,11 +234,14 @@ impl<'a> Parser<'a> {
     
     fn get_prefix_rule(t: Token) -> Result<PrefixRule<'a>, ParseError> {
         match t {
+            Token::True => Ok(Self::bool_lit),
+            Token::False => Ok(Self::bool_lit),
             Token::Number(_) => Ok(Self::number),
             Token::LParen => Ok(Self::grouping),
             Token::LBrace => Ok(Self::block),
             Token::Let => Ok(Self::let_decl),
             Token::Var(_) => Ok(Self::var_ref),
+            Token::If => Ok(Self::conditional),
             _ => Err(ParseError::NotImplemented(format!("No prefix rule for token type {:?}", t))),
         }
     }
@@ -266,6 +307,15 @@ mod test {
     }
 
     #[test]
+    fn simple_block() {
+        let scanner = make_scanner("{1}");
+        let parsed = Parser::new(scanner).parse();
+        assert_eq!(parsed, Ok(
+            Block(vec![Num(1, ())], ())
+        ));
+    }
+
+    #[test]
     fn arithmetic() {
         let scanner = make_scanner("1 - 2 * 3");
         let parsed = Parser::new(scanner).parse();
@@ -314,5 +364,37 @@ mod test {
     fn bad_grouping() {
         let scanner = make_scanner("(2580");
         assert!(Parser::new(scanner).parse().is_err())
+    }
+
+    #[test]
+    fn bool() {
+        let scanner = make_scanner("false");
+        assert_eq!(Parser::new(scanner).parse(), Ok(BoolLit(false, ())));
+        let scanner = make_scanner("true");
+        assert_eq!(Parser::new(scanner).parse(), Ok(BoolLit(true, ())));
+    }
+
+    #[test]
+    fn conditional() {
+        let scanner = make_scanner("if true { 1 } else { 3 + 2 }");
+        assert_eq!(
+            Parser::new(scanner).parse(), Ok(
+                If(
+                    Box::new(BoolLit(true, ())),
+                    Box::new(Block(vec![Num(1, ())], ())),
+                    Box::new(
+                        Block(vec![
+                            Plus(
+                                Box::new(Num(3, ())),
+                                Box::new(Num(2, ())),
+                                ()
+                            )
+                        ], ()
+                        )
+                    ),
+                    ()
+                )
+            )
+        );
     }
 }
