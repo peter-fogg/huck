@@ -16,6 +16,8 @@ pub struct Compiler<'a, 'ctx> {
     env: HashMap<String, PointerValue<'ctx>>
 }
 
+type CompileInput = HuckAst<()>;
+
 type CompileResult<T> = Result<T, String>;
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
@@ -25,7 +27,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         builder: &'a Builder<'ctx>,
         module: &'a Module<'ctx>,
         fpm: &'a PassManager<FunctionValue<'ctx>>,
-        expr: HuckAst,
+        expr: CompileInput,
     ) -> CompileResult<FunctionValue<'ctx>> {
         let mut compiler = Self {
             context,
@@ -38,7 +40,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         compiler.compile_main(expr)
     }
 
-    pub fn compile_main(&mut self, expr: HuckAst) -> CompileResult<FunctionValue<'ctx>> {
+    pub fn compile_main(&mut self, expr: CompileInput) -> CompileResult<FunctionValue<'ctx>> {
         let fn_type = self.context.i64_type().fn_type(&[], false);
 
         // try calling print_int
@@ -60,7 +62,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         Ok(fn_val)
     }
 
-    fn compile_let(&mut self, ident: String, init_expr: HuckAst) -> CompileResult<IntValue<'ctx>> {
+    fn compile_let(&mut self, ident: String, init_expr: CompileInput) -> CompileResult<IntValue<'ctx>> {
         let init_val = self.compile_expr(init_expr)?;
         let allocation = self.allocate_var(&ident);
         self.builder.build_store(allocation, init_val);
@@ -78,44 +80,44 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     }
 
-    fn compile_expr(&mut self, expr: HuckAst) -> CompileResult<IntValue<'ctx>> {
+    fn compile_expr(&mut self, expr: CompileInput) -> CompileResult<IntValue<'ctx>> {
         match expr {
-            HuckAst::Num(n) => {
+            HuckAst::Num(n, _) => {
                 Ok(self.context.i64_type().const_int(n, false))
             },
-            HuckAst::Plus(lhs, rhs) => {
+            HuckAst::Plus(lhs, rhs, _) => {
                 let lexpr = self.compile_expr(*lhs)?;
                 let rexpr = self.compile_expr(*rhs)?;
 
                 Ok(self.builder.build_int_add(lexpr, rexpr, "tmpadd"))
             },
-            HuckAst::Minus(lhs, rhs) => {
+            HuckAst::Minus(lhs, rhs, _) => {
                 let lexpr = self.compile_expr(*lhs)?;
                 let rexpr = self.compile_expr(*rhs)?;
 
                 Ok(self.builder.build_int_sub(lexpr, rexpr, "tmpsub"))
             },
-            HuckAst::Times(lhs, rhs) => {
+            HuckAst::Times(lhs, rhs, _) => {
                 let lexpr = self.compile_expr(*lhs)?;
                 let rexpr = self.compile_expr(*rhs)?;
 
                 Ok(self.builder.build_int_mul(lexpr, rexpr, "tmpmul"))
             },
-            HuckAst::Div(lhs, rhs) => {
+            HuckAst::Div(lhs, rhs, _) => {
                 let lexpr = self.compile_expr(*lhs)?;
                 let rexpr = self.compile_expr(*rhs)?;
 
                 Ok(self.builder.build_int_signed_div(lexpr, rexpr, "tmpdiv"))
             },
-            HuckAst::Block(exprs) => {
+            HuckAst::Block(exprs, _) => {
                 let mut result = Err(String::from("Empty block"));
                 for expr in exprs {
                     result = self.compile_expr(expr);
                 }
                 result
             },
-            HuckAst::Let(ident, init_expr) => self.compile_let(ident, *init_expr),
-            HuckAst::VarRef(ident) => self.compile_var_ref(ident),
+            HuckAst::Let(ident, init_expr, _) => self.compile_let(ident, *init_expr),
+            HuckAst::VarRef(ident, _) => self.compile_var_ref(ident),
         }
     }
 

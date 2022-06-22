@@ -2,15 +2,15 @@ use crate::scanner::{Scanner, Token};
 use std::iter::{Iterator, Peekable};
 
 #[derive(Debug, PartialEq)]
-pub enum HuckAst { // Boxed to allow data recursion
-    Num(u64),
-    Plus(Box<HuckAst>, Box<HuckAst>),
-    Minus(Box<HuckAst>, Box<HuckAst>),
-    Times(Box<HuckAst>, Box<HuckAst>),
-    Div(Box<HuckAst>, Box<HuckAst>),
-    Let(String, Box<HuckAst>),
-    VarRef(String),
-    Block(Vec<HuckAst>),
+pub enum HuckAst<T> { // Boxed to allow data recursion
+    Num(u64, T),
+    Plus(Box<HuckAst<T>>, Box<HuckAst<T>>, T),
+    Minus(Box<HuckAst<T>>, Box<HuckAst<T>>, T),
+    Times(Box<HuckAst<T>>, Box<HuckAst<T>>, T),
+    Div(Box<HuckAst<T>>, Box<HuckAst<T>>, T),
+    Let(String, Box<HuckAst<T>>, T),
+    VarRef(String, T),
+    Block(Vec<HuckAst<T>>, T),
 }
 
 #[derive(Debug, PartialEq)]
@@ -46,11 +46,13 @@ impl Prec {
 
 type TokenStream<'a> = Peekable<Scanner<'a>>;
 
-type ParseResult = Result<HuckAst, ParseError>;
+type ParseOutput = HuckAst<()>;
+
+type ParseResult = Result<ParseOutput, ParseError>;
 
 type PrefixRule<'a> = fn(&mut Parser<'a>, token: Token<'a>) -> ParseResult;
 
-type InfixRule<'a> = fn(&mut Parser<'a>, token: Token<'a>, lhs: HuckAst) -> ParseResult;
+type InfixRule<'a> = fn(&mut Parser<'a>, token: Token<'a>, lhs: ParseOutput) -> ParseResult;
 
 pub struct Parser<'a> {
     tokens: TokenStream<'a>,
@@ -96,7 +98,7 @@ impl<'a> Parser<'a> {
         match token {
             Token::Number(num_str) => {
                 if let Ok(num) = num_str.parse() {
-                    Ok(HuckAst::Num(num))
+                    Ok(HuckAst::Num(num, ()))
                 } else {
                     Err(ParseError::Fucked(format!("Failed to parse number {}", num_str)))
                 }
@@ -105,24 +107,28 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn binary(&mut self, f: fn (Box<HuckAst>, Box<HuckAst>) -> HuckAst, prec: Prec, lhs: HuckAst) -> ParseResult {
+    fn binary(&mut self,
+              f: fn (Box<ParseOutput>, Box<ParseOutput>, ()) -> ParseOutput,
+              prec: Prec,
+              lhs: ParseOutput
+    ) -> ParseResult {
         let rhs = self.parse_prec(Prec::next(prec))?;
-        Ok(f(Box::new(lhs), Box::new(rhs)))
+        Ok(f(Box::new(lhs), Box::new(rhs), ()))
     }
 
-    fn plus(&mut self, _token: Token<'a>, lhs: HuckAst) -> ParseResult {
+    fn plus(&mut self, _token: Token<'a>, lhs: ParseOutput) -> ParseResult {
         self.binary(HuckAst::Plus, Prec::AddSub, lhs)
     }
 
-    fn minus(&mut self, _token: Token<'a>, lhs: HuckAst) -> ParseResult {
+    fn minus(&mut self, _token: Token<'a>, lhs: ParseOutput) -> ParseResult {
         self.binary(HuckAst::Minus, Prec::AddSub, lhs)
     }
 
-    fn times(&mut self, _token: Token<'a>, lhs: HuckAst) -> ParseResult {
+    fn times(&mut self, _token: Token<'a>, lhs: ParseOutput) -> ParseResult {
         self.binary(HuckAst::Times, Prec::MultDiv, lhs)
     }
 
-    fn div(&mut self, _token: Token<'a>, lhs: HuckAst) -> ParseResult {
+    fn div(&mut self, _token: Token<'a>, lhs: ParseOutput) -> ParseResult {
         self.binary(HuckAst::Div, Prec::MultDiv, lhs)
     }
 
@@ -144,7 +150,7 @@ impl<'a> Parser<'a> {
             next = self.tokens.peek();
         }
         self.consume(Token::RBrace)?;
-        Ok(HuckAst::Block(exprs))
+        Ok(HuckAst::Block(exprs, ()))
     }
 
     fn let_decl(&mut self, _token: Token<'a>) -> ParseResult {
@@ -158,12 +164,12 @@ impl<'a> Parser<'a> {
 
         let expr = self.expression()?;
 
-        Ok(HuckAst::Let(ident.to_string(), Box::new(expr)))
+        Ok(HuckAst::Let(ident.to_string(), Box::new(expr), ()))
     }
 
     fn var_ref(&mut self, token: Token<'a>) -> ParseResult {
         match token {
-            Token::Var(ident) => Ok(HuckAst::VarRef(ident.to_string())),
+            Token::Var(ident) => Ok(HuckAst::VarRef(ident.to_string(), ())),
             _ => Err(ParseError::Fucked("Expected variable reference".to_string()))
         }
     }
@@ -233,14 +239,14 @@ mod test {
     fn number() {
         let scanner = make_scanner("42");
         let parsed = Parser::new(scanner).parse();
-        assert_eq!(parsed, Ok(Num(42)));
+        assert_eq!(parsed, Ok(Num(42, ())));
     }
 
     #[test]
     fn let_decl() {
         let scanner = make_scanner("let var_name = 5");
         let parsed = Parser::new(scanner).parse();
-        assert_eq!(parsed, Ok(Let("var_name".to_string(), Box::new(Num(5)))));
+        assert_eq!(parsed, Ok(Let("var_name".to_string(), Box::new(Num(5, ())), ())));
     }
 
     #[test]
@@ -249,12 +255,13 @@ mod test {
         let parsed = Parser::new(scanner).parse();
         assert_eq!(parsed, Ok(
             Block(vec![
-                Let("x".to_string(), Box::new(Num(42))),
+                Let("x".to_string(), Box::new(Num(42, ())), ()),
                 Plus(
-                    Box::new(VarRef("x".to_string())),
-                    Box::new(Num(1))
+                    Box::new(VarRef("x".to_string(), ())),
+                    Box::new(Num(1, ())),
+                    ()
                 ),
-            ])
+            ], ())
         ));
     }
 
@@ -265,11 +272,13 @@ mod test {
 
         assert_eq!(parsed, Ok(
             Minus(
-                Box::new(Num(1)),
+                Box::new(Num(1, ())),
                 Box::new(Times(
-                    Box::new(Num(2)),
-                    Box::new(Num(3))
-                ))
+                    Box::new(Num(2, ())),
+                    Box::new(Num(3, ())),
+                    ()
+                )),
+                ()
             )
         ));
     }
@@ -282,10 +291,12 @@ mod test {
         assert_eq!(parsed, Ok(
             Div(
                 Box::new(Plus(
-                    Box::new(Num(1)),
-                    Box::new(Num(2))
+                    Box::new(Num(1, ())),
+                    Box::new(Num(2, ())),
+                    ()
                 )),
-                Box::new(Num(3))
+                Box::new(Num(3, ())),
+                ()
             )
         ));
     }
@@ -295,7 +306,7 @@ mod test {
         let scanner = make_scanner("(((420)))");
         assert_eq!(
             Parser::new(scanner).parse(),
-            Ok(Num(420))
+            Ok(Num(420, ()))
         )
     }
 
