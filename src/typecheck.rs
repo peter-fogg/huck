@@ -3,6 +3,7 @@ use crate::parser::{HuckAst, ParseOutput};
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum TypeInfo {
     Unit,
+    Bool,
     Int64,
 }
 
@@ -16,6 +17,7 @@ type CheckResult = Result<(CheckOutput, TypeInfo), String>;
 pub fn check(ast: &CheckInput) -> CheckResult {
     match ast {
         HuckAst::Num(n, _) => Ok((HuckAst::Num(*n, TypeInfo::Int64), TypeInfo::Int64)),
+        HuckAst::BoolLit(b, _) => Ok((HuckAst::BoolLit(*b, TypeInfo::Bool), TypeInfo::Bool)),
         HuckAst::Plus(lhs, rhs, _) => check_binary(&lhs, &rhs, HuckAst::Plus),
         HuckAst::Minus(lhs, rhs, _) => check_binary(&lhs, &rhs, HuckAst::Minus),
         HuckAst::Times(lhs, rhs, _) => check_binary(&lhs, &rhs, HuckAst::Times),
@@ -37,7 +39,7 @@ pub fn check(ast: &CheckInput) -> CheckResult {
 
             Ok((HuckAst::Block(checked_exprs, last_expr_type), last_expr_type))
         },
-        _ => todo!("Need to implement symbol table, etc;")
+        HuckAst::VarRef(_, _) => todo!("Need to implement symbol table, etc;")
     }
 }
 

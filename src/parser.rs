@@ -4,6 +4,7 @@ use std::iter::{Iterator, Peekable};
 #[derive(Debug, PartialEq)]
 pub enum HuckAst<T> { // Boxed to allow data recursion
     Num(u64, T),
+    BoolLit(bool, T),
     Plus(Box<HuckAst<T>>, Box<HuckAst<T>>, T),
     Minus(Box<HuckAst<T>>, Box<HuckAst<T>>, T),
     Times(Box<HuckAst<T>>, Box<HuckAst<T>>, T),
@@ -11,6 +12,22 @@ pub enum HuckAst<T> { // Boxed to allow data recursion
     Let(String, Box<HuckAst<T>>, T),
     VarRef(String, T),
     Block(Vec<HuckAst<T>>, T),
+}
+
+impl<T> HuckAst<T> {
+    pub fn get_metadata(&self) -> &T {
+        match self {
+            Self::Num(_, t) => t,
+            Self::BoolLit(_, t) => t,
+            Self::Plus(_, _, t) => t,
+            Self::Minus(_, _, t) => t,
+            Self::Times(_, _, t) => t,
+            Self::Div(_, _, t) => t,
+            Self::Let(_, _, t) => t,
+            Self::VarRef(_, t) => t,
+            Self::Block(_, t) => t,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -174,6 +191,14 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn bool_lit(&mut self, token: Token<'a>) -> ParseResult {
+        match token {
+            Token::True => Ok(HuckAst::BoolLit(true, ())),
+            Token::False => Ok(HuckAst::BoolLit(false, ())),
+            _ => Err(ParseError::Fucked(format!("Bad boolean literal {:?}", token))),
+        }
+    }
+
     fn consume(&mut self, token: Token) -> Result<(), ParseError> {
         match self.tokens.peek() {
             Some(c) if *c == token => {
@@ -196,6 +221,8 @@ impl<'a> Parser<'a> {
     
     fn get_prefix_rule(t: Token) -> Result<PrefixRule<'a>, ParseError> {
         match t {
+            Token::True => Ok(Self::bool_lit),
+            Token::False => Ok(Self::bool_lit),
             Token::Number(_) => Ok(Self::number),
             Token::LParen => Ok(Self::grouping),
             Token::LBrace => Ok(Self::block),
@@ -314,5 +341,13 @@ mod test {
     fn bad_grouping() {
         let scanner = make_scanner("(2580");
         assert!(Parser::new(scanner).parse().is_err())
+    }
+
+    #[test]
+    fn bool() {
+        let scanner = make_scanner("false");
+        assert_eq!(Parser::new(scanner).parse(), Ok(BoolLit(false, ())));
+        let scanner = make_scanner("true");
+        assert_eq!(Parser::new(scanner).parse(), Ok(BoolLit(true, ())));
     }
 }
