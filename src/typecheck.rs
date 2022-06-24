@@ -10,6 +10,7 @@ type CheckInput = ParseOutput;
 
 pub type CheckOutput = HuckAst<TypeInfo>;
 
+// I hate returning the tuple with redundant information
 type CheckResult = Result<(CheckOutput, TypeInfo), String>;
 
 pub fn check(ast: &CheckInput) -> CheckResult {
@@ -23,16 +24,20 @@ pub fn check(ast: &CheckInput) -> CheckResult {
             let (checked_expr, type_info) = check(&init_expr)?;
             Ok((HuckAst::Let(String::from(ident), Box::new(checked_expr), type_info), type_info))
         }
-        // HuckAst::Block(exprs, _) => {
-        //     match exprs.last() {
-        //         None => Ok((HuckAst::Block(vec![], TypeInfo::Unit), TypeInfo::Unit)),
-        //         Some(ref expr) => {
-        //             let (checked_expr, type_info) = check(expr)?;
-        //             todo!("still not there");
-        //         }
-        //     }
-        // },
-        _ => todo!()
+        HuckAst::Block(exprs, _) => {
+            let mut last_expr_type = TypeInfo::Unit;
+            let mut checked_exprs: Vec<CheckOutput> = vec![];
+            checked_exprs.reserve_exact(exprs.len());
+
+            for expr in exprs {
+                let (checked_expr, type_info) = check(expr)?;
+                checked_exprs.push(checked_expr);
+                last_expr_type = type_info;
+            }
+
+            Ok((HuckAst::Block(checked_exprs, last_expr_type), last_expr_type))
+        },
+        _ => todo!("Need to implement symbol table, etc;")
     }
 }
 
@@ -44,6 +49,6 @@ fn check_binary(lhs: &CheckInput, rhs: &CheckInput, f: BinaryExpr) -> CheckResul
     if l_type == r_type {
         Ok((f(Box::new(checked_lhs), Box::new(checked_rhs), l_type), l_type))
     } else {
-        Err(String::from("foo"))
+        Err(format!("Cannot typecheck expressions {:?} and {:?}", lhs, rhs))
     }
 }
