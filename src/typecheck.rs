@@ -40,7 +40,8 @@ pub fn check(ast: &CheckInput) -> CheckResult {
 
             Ok(HuckAst::Block(checked_exprs, last_expr_type))
         },
-        HuckAst::VarRef(_, _) => todo!("Need to implement symbol table, etc;")
+        HuckAst::VarRef(_, _) => todo!("Need to implement symbol table, etc;"),
+        HuckAst::If(_, _, _, _) => todo!("Haven't done if yet"),
     }
 }
 

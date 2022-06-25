@@ -125,6 +125,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 if b { 1 } else { 0 },
                 false
             )),
+            HuckAst::If(_, _, _, _) => todo!("Haven't gotten to if statements yet"),
         }
     }
 
