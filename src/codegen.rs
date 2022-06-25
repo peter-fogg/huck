@@ -3,6 +3,7 @@ use crate::typecheck::{CheckOutput, TypeInfo};
 
 use std::collections::HashMap;
 
+use inkwell::IntPredicate;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
@@ -83,6 +84,42 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     }
 
+    fn compile_if(&mut self, test_expr: CompileInput, then_expr: CompileInput, else_expr: CompileInput) -> CompileResult<IntValue<'ctx>> {
+        let zero = self.context.bool_type().const_int(1, false);
+        let test_expr = self.builder.build_int_compare(
+            IntPredicate::EQ,
+            self.compile_expr(test_expr)?,
+            zero,
+            "if_condition"
+        );
+
+        let fn_val = self.module.get_function("main").unwrap();
+        let then_block = self.context.append_basic_block(fn_val, "then");
+        let else_block = self.context.append_basic_block(fn_val, "else");
+        let cont_block = self.context.append_basic_block(fn_val, "cont");
+
+        self.builder.build_conditional_branch(test_expr, then_block, else_block);
+
+        self.builder.position_at_end(then_block);
+        let then_value = self.compile_expr(then_expr)?;
+        self.builder.build_unconditional_branch(cont_block);
+
+        // No idea why this line is necessary -- it's undocumented but used in Inkwell
+        // maybe we'll leave it be for now ala Chesterton's fence
+        let then_block = self.builder.get_insert_block().unwrap();
+
+        self.builder.position_at_end(else_block);
+        let else_value = self.compile_expr(else_expr)?;
+        self.builder.build_unconditional_branch(cont_block);
+        let else_block = self.builder.get_insert_block().unwrap(); // same here
+
+        self.builder.position_at_end(cont_block);
+        let phi_node = self.builder.build_phi(self.context.i64_type(), "iftmp");
+        phi_node.add_incoming(&[(&then_value, then_block), (&else_value, else_block)]);
+
+        Ok(phi_node.as_basic_value().into_int_value())
+    }
+
     fn compile_expr(&mut self, expr: CompileInput) -> CompileResult<IntValue<'ctx>> {
         match expr {
             HuckAst::Num(n, _) => {
@@ -125,7 +162,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 if b { 1 } else { 0 },
                 false
             )),
-            HuckAst::If(_, _, _, _) => todo!("Haven't gotten to if statements yet"),
+            HuckAst::If(test_expr, then_expr, else_expr, _) => self.compile_if(
+                *test_expr, *then_expr, *else_expr
+            ),
         }
     }
 

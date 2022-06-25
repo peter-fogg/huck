@@ -1,4 +1,4 @@
-if true {
+if false {
   1
 } else {
   2
