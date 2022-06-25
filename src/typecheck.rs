@@ -17,12 +17,12 @@ pub fn check(ast: &CheckInput) -> CheckResult {
     match ast {
         HuckAst::Num(n, _) => Ok(HuckAst::Num(*n, TypeInfo::Int64)),
         HuckAst::BoolLit(b, _) => Ok(HuckAst::BoolLit(*b, TypeInfo::Bool)),
-        HuckAst::Plus(lhs, rhs, _) => check_binary(&lhs, &rhs, HuckAst::Plus),
-        HuckAst::Minus(lhs, rhs, _) => check_binary(&lhs, &rhs, HuckAst::Minus),
-        HuckAst::Times(lhs, rhs, _) => check_binary(&lhs, &rhs, HuckAst::Times),
-        HuckAst::Div(lhs, rhs, _) => check_binary(&lhs, &rhs, HuckAst::Div),
+        HuckAst::Plus(lhs, rhs, _) => check_binary(lhs, rhs, HuckAst::Plus),
+        HuckAst::Minus(lhs, rhs, _) => check_binary(lhs, rhs, HuckAst::Minus),
+        HuckAst::Times(lhs, rhs, _) => check_binary(lhs, rhs, HuckAst::Times),
+        HuckAst::Div(lhs, rhs, _) => check_binary(lhs, rhs, HuckAst::Div),
         HuckAst::Let(ident, init_expr, _) => {
-            let checked_expr = check(&init_expr)?;
+            let checked_expr = check(init_expr)?;
             let &type_info = checked_expr.get_metadata();
             Ok(HuckAst::Let(String::from(ident), Box::new(checked_expr), type_info))
         }
@@ -41,12 +41,12 @@ pub fn check(ast: &CheckInput) -> CheckResult {
             Ok(HuckAst::Block(checked_exprs, last_expr_type))
         },
         HuckAst::If(test_expr, then_expr, else_expr, _) => {
-            let checked_test = check(&test_expr)?;
+            let checked_test = check(test_expr)?;
             if *checked_test.get_metadata() != TypeInfo::Bool {
                 Err(String::from("Require boolean condition for if expression"))
             } else {
-                let checked_then = check(&then_expr)?;
-                let checked_else = check(&else_expr)?;
+                let checked_then = check(then_expr)?;
+                let checked_else = check(else_expr)?;
                 let &then_type = checked_then.get_metadata();
                 let &else_type = checked_else.get_metadata();
                 if then_type == else_type {
