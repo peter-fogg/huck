@@ -40,8 +40,34 @@ pub fn check(ast: &CheckInput) -> CheckResult {
 
             Ok(HuckAst::Block(checked_exprs, last_expr_type))
         },
+        HuckAst::If(test_expr, then_expr, else_expr, _) => {
+            let checked_test = check(&test_expr)?;
+            if *checked_test.get_metadata() != TypeInfo::Bool {
+                Err(String::from("Require boolean condition for if expression"))
+            } else {
+                let checked_then = check(&then_expr)?;
+                let checked_else = check(&else_expr)?;
+                let &then_type = checked_then.get_metadata();
+                let &else_type = checked_else.get_metadata();
+                if then_type == else_type {
+                    Ok(
+                        HuckAst::If(
+                            Box::new(checked_test),
+                            Box::new(checked_then),
+                            Box::new(checked_else),
+                            then_type
+                        )
+                    )
+                } else {
+                    Err(format!(
+                        "Conditional branch types {:?} and {:?} do not match",
+                        then_type,
+                        else_type
+                    ))
+                }
+            }
+        },
         HuckAst::VarRef(_, _) => todo!("Need to implement symbol table, etc;"),
-        HuckAst::If(_, _, _, _) => todo!("Haven't done if yet"),
     }
 }
 
