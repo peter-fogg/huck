@@ -6,6 +6,11 @@
 
 # Declarations
 Locally, `let x = 1;`. Non recursive.
+  - Possibility for local recursive bindings (`letrec`), with multiple bindings separated by commas:
+  - ```
+    let odd = fn (x: i64): bool { if (x == 0) { false } else { even(x - 1) },
+        even = fn (x: i64): bool { if (x == 0) { true } else { odd(x - 1) };
+    ```
 
 At top-level, global and potentially recursive declarations. Still `let global = true;` syntax.
 
