@@ -157,6 +157,10 @@ impl<'a> Parser<'a> {
     }
 
     fn block(&mut self, _token: Token<'a>) -> ParseResult {
+        if self.next_is(Token::RBrace) {
+            return Err(ParseError::Fucked("Empty block".to_string()));
+        }
+
         let mut exprs = vec![self.expression()?];
         let mut next = self.tokens.peek();
 
@@ -209,6 +213,13 @@ impl<'a> Parser<'a> {
         self.consume(Token::LBrace)?;
         let else_branch = self.block(token)?;
         Ok(HuckAst::If(Box::new(test), Box::new(true_branch), Box::new(else_branch), ()))
+    }
+
+    fn next_is(&mut self, token: Token) -> bool {
+        match self.tokens.peek() {
+            Some(t) if *t == token => true,
+            _ => false
+        }
     }
 
     fn consume(&mut self, token: Token) -> Result<(), ParseError> {
@@ -313,6 +324,13 @@ mod test {
         assert_eq!(parsed, Ok(
             Block(vec![Num(1, ())], ())
         ));
+    }
+
+    #[test]
+    fn empty_block() {
+        let scanner = make_scanner("{}");
+        let parsed = Parser::new(scanner).parse();
+        assert!(parsed.is_err());
     }
 
     #[test]
