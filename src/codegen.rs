@@ -1,199 +1,21 @@
-use crate::parser::HuckAst;
-use crate::typecheck::{CheckOutput, TypeInfo};
+use crate::typecheck::CheckOutput;
 
-use std::collections::HashMap;
-
-use inkwell::IntPredicate;
-use inkwell::builder::Builder;
-use inkwell::context::Context;
-use inkwell::module::Module;
-use inkwell::passes::PassManager;
-use inkwell::types::{AnyType, AnyTypeEnum, BasicTypeEnum};
-use inkwell::values::{FunctionValue, IntValue, PointerValue};
-
-pub struct Compiler<'a, 'ctx> {
-    pub context: &'ctx Context,
-    pub builder: &'a Builder<'ctx>,
-    pub module: &'a Module<'ctx>,
-    pub fpm: &'a PassManager<FunctionValue<'ctx>>,
-    env: HashMap<String, PointerValue<'ctx>>
-}
+use std::io::Write;
 
 type CompileInput = CheckOutput;
 
-type CompileResult<T> = Result<T, String>;
+// type CompileResult<T> = Result<T, String>;
+type CompileResult<T> = T;
 
-impl<'a, 'ctx> Compiler<'a, 'ctx> {
+pub fn compile<T>(_code: CompileInput, output: &mut T) -> CompileResult<()>
+where T: Write
+{
+    write_header(output);
+    output.write(
+        "  movl $1, %eax\n  ret\n".as_bytes()
+    );
+}
 
-    pub fn compile (
-        context: &'ctx Context,
-        builder: &'a Builder<'ctx>,
-        module: &'a Module<'ctx>,
-        fpm: &'a PassManager<FunctionValue<'ctx>>,
-        expr: CompileInput,
-    ) -> CompileResult<FunctionValue<'ctx>> {
-        let mut compiler = Self {
-            context,
-            builder,
-            module,
-            fpm,
-            env: HashMap::new()
-        };
-
-        compiler.compile_main(expr)
-    }
-
-    pub fn compile_main(&mut self, expr: CompileInput) -> CompileResult<FunctionValue<'ctx>> {
-        let fn_type = self.context.i64_type().fn_type(&[], false);
-
-        // try calling print_int
-        let print_fn_type = self.context.void_type().fn_type(&[self.context.i64_type().into()], false);
-        let print_int = self.module.add_function("print_int", print_fn_type, None);
-        
-        // end call
-
-        let fn_val = self.module.add_function("main", fn_type, None);
-
-        let entry = self.context.append_basic_block(fn_val, "entry");
-        self.builder.position_at_end(entry);
-
-        let body = self.compile_expr(expr)?;
-        self.builder.build_call(print_int, &[body.into()], "tmp").try_as_basic_value();
-
-        self.builder.build_return(Some(&body));
-
-        Ok(fn_val)
-    }
-
-    fn compile_let(&mut self, ident: String, init_expr: CompileInput) -> CompileResult<IntValue<'ctx>> {
-        let llvm_type = self.get_llvm_basic_type(&init_expr);
-        let init_val = self.compile_expr(init_expr)?;
-        let allocation = self.allocate_var(&ident, llvm_type);
-        self.builder.build_store(allocation, init_val);
-        self.env.insert(ident, allocation);
-        Ok(init_val)
-    }
-
-    fn compile_var_ref(&mut self, ident: String) -> CompileResult<IntValue<'ctx>> {
-        match self.env.get(&ident) {
-            Some(allocation) => {
-                Ok(self.builder.build_load(*allocation, "load").into_int_value())
-            },
-            None => Err(format!("identifier \"{}\" not found", ident))
-        }
-
-    }
-
-    fn compile_if(&mut self, test_expr: CompileInput, then_expr: CompileInput, else_expr: CompileInput) -> CompileResult<IntValue<'ctx>> {
-        let zero = self.context.bool_type().const_int(1, false);
-        let test_expr = self.builder.build_int_compare(
-            IntPredicate::EQ,
-            self.compile_expr(test_expr)?,
-            zero,
-            "if_condition"
-        );
-
-        let fn_val = self.module.get_function("main").unwrap();
-        let then_block = self.context.append_basic_block(fn_val, "then");
-        let else_block = self.context.append_basic_block(fn_val, "else");
-        let cont_block = self.context.append_basic_block(fn_val, "cont");
-
-        self.builder.build_conditional_branch(test_expr, then_block, else_block);
-
-        self.builder.position_at_end(then_block);
-        let then_value = self.compile_expr(then_expr)?;
-        self.builder.build_unconditional_branch(cont_block);
-
-        // No idea why this line is necessary -- it's undocumented but used in Inkwell
-        // maybe we'll leave it be for now ala Chesterton's fence
-        let then_block = self.builder.get_insert_block().unwrap();
-
-        self.builder.position_at_end(else_block);
-        let else_value = self.compile_expr(else_expr)?;
-        self.builder.build_unconditional_branch(cont_block);
-        let else_block = self.builder.get_insert_block().unwrap(); // same here
-
-        self.builder.position_at_end(cont_block);
-        let phi_node = self.builder.build_phi(self.context.i64_type(), "iftmp");
-        phi_node.add_incoming(&[(&then_value, then_block), (&else_value, else_block)]);
-
-        Ok(phi_node.as_basic_value().into_int_value())
-    }
-
-    fn compile_expr(&mut self, expr: CompileInput) -> CompileResult<IntValue<'ctx>> {
-        match expr {
-            HuckAst::Num(n, _) => {
-                Ok(self.context.i64_type().const_int(n, false))
-            },
-            HuckAst::Plus(lhs, rhs, _) => {
-                let lexpr = self.compile_expr(*lhs)?;
-                let rexpr = self.compile_expr(*rhs)?;
-
-                Ok(self.builder.build_int_add(lexpr, rexpr, "tmpadd"))
-            },
-            HuckAst::Minus(lhs, rhs, _) => {
-                let lexpr = self.compile_expr(*lhs)?;
-                let rexpr = self.compile_expr(*rhs)?;
-
-                Ok(self.builder.build_int_sub(lexpr, rexpr, "tmpsub"))
-            },
-            HuckAst::Times(lhs, rhs, _) => {
-                let lexpr = self.compile_expr(*lhs)?;
-                let rexpr = self.compile_expr(*rhs)?;
-
-                Ok(self.builder.build_int_mul(lexpr, rexpr, "tmpmul"))
-            },
-            HuckAst::Div(lhs, rhs, _) => {
-                let lexpr = self.compile_expr(*lhs)?;
-                let rexpr = self.compile_expr(*rhs)?;
-
-                Ok(self.builder.build_int_signed_div(lexpr, rexpr, "tmpdiv"))
-            },
-            HuckAst::Block(exprs, _) => {
-                let mut result = Err(String::from("Empty block"));
-                for expr in exprs {
-                    result = self.compile_expr(expr);
-                }
-                result
-            },
-            HuckAst::Let(ident, init_expr, _) => self.compile_let(ident, *init_expr),
-            HuckAst::VarRef(ident, _) => self.compile_var_ref(ident),
-            HuckAst::BoolLit(b, _) => Ok(self.context.bool_type().const_int(
-                if b { 1 } else { 0 },
-                false
-            )),
-            HuckAst::If(test_expr, then_expr, else_expr, _) => self.compile_if(
-                *test_expr, *then_expr, *else_expr
-            ),
-        }
-    }
-
-    fn allocate_var(&self, ident: &str, llvm_type: BasicTypeEnum<'ctx>) -> PointerValue<'ctx> {
-        let builder = self.context.create_builder();
-
-        let fn_val = self.module.get_function("main").unwrap();
-
-        let entry = fn_val.get_first_basic_block().unwrap();
-
-        match entry.get_first_instruction() {
-            Some(first_instr) => builder.position_before(&first_instr),
-            None => builder.position_at_end(entry),
-        }
-
-        builder.build_alloca(llvm_type, ident)
-    }
-
-    fn get_llvm_basic_type(&self, expr: &CompileInput) -> BasicTypeEnum<'ctx> {
-        // this is a hack
-        BasicTypeEnum::try_from(self.get_llvm_type(expr)).unwrap()
-    }
-
-    fn get_llvm_type(&self, expr: &CompileInput) -> AnyTypeEnum<'ctx> {
-        let type_info = expr.get_metadata();
-        match type_info {
-            TypeInfo::Unit => self.context.void_type().as_any_type_enum(),
-            TypeInfo::Bool => self.context.bool_type().as_any_type_enum(),
-            TypeInfo::Int64 => self.context.i64_type().as_any_type_enum(),
-        }
-    }
+fn write_header<T>(output: &mut T) where T: Write {
+    output.write(".global main\nmain:\n".as_bytes());
 }

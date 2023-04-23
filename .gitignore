@@ -5,3 +5,4 @@ huck.ll
 a.out
 hucktest
 *.o
+*.s
