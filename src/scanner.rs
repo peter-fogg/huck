@@ -1,22 +1,22 @@
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Token<'a> {
-    Plus,
-    Minus,
-    Star,
-    Slash,
+    // Plus,
+    // Minus,
+    // Star,
+    // Slash,
     Number(&'a str),
-    True,
-    False,
-    RParen,
-    LParen,
-    RBrace,
-    LBrace,
-    Let,
-    SingleEq,
-    Semicolon,
-    Var(&'a str),
-    If,
-    Else,
+    // True,
+    // False,
+    // RParen,
+    // LParen,
+    // RBrace,
+    // LBrace,
+    // Let,
+    // SingleEq,
+    // Semicolon,
+    // Var(&'a str),
+    // If,
+    // Else,
 }
 use Token::*;
 
@@ -48,27 +48,27 @@ impl<'a> Scanner<'a> {
         Some(Number(self.source.get(start_index..self.position)?))
     }
 
-    fn identifier(&mut self) -> Option<Token<'a>> {
-        let start_index = self.position - 1;
+    // fn identifier(&mut self) -> Option<Token<'a>> {
+    //     let start_index = self.position - 1;
 
-        while let Some(next_char) = self.peek() {
-            if Self::is_digit(next_char) || Self::is_alpha(next_char) {
-                self.position += 1;
-            }
-            else { break; }
-        }
+    //     while let Some(next_char) = self.peek() {
+    //         if Self::is_digit(next_char) || Self::is_alpha(next_char) {
+    //             self.position += 1;
+    //         }
+    //         else { break; }
+    //     }
 
-        let ident = self.source.get(start_index..self.position)?;
+    //     let ident = self.source.get(start_index..self.position)?;
 
-        Some(match ident {
-            "let" => Let,
-            "true" => True,
-            "false" => False,
-            "if" => If,
-            "else" => Else,
-            _ => Var(ident)
-        })
-    }
+    //     Some(match ident {
+    //         "let" => Let,
+    //         "true" => True,
+    //         "false" => False,
+    //         "if" => If,
+    //         "else" => Else,
+    //         _ => Var(ident)
+    //     })
+    // }
 
     // Get the next character, if it exists, and advance the scanner
     fn next_char(&mut self) -> Option<&'a str> {
@@ -95,9 +95,9 @@ impl<'a> Scanner<'a> {
         "0123456789".contains(s)
     }
 
-    pub fn is_alpha(s: &'a str) -> bool {
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_".contains(s)
-    }
+    // pub fn is_alpha(s: &'a str) -> bool {
+    //     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_".contains(s)
+    // }
 
     pub fn is_whitespace(s: &'a str) -> bool {
         " \t\n".contains(s)
@@ -115,17 +115,18 @@ impl<'a> Iterator for Scanner<'a> {
                 c if Self::is_digit(c) => {
                     return self.number()
                 },
-                "+" => return Some(Plus),
-                "-" => return Some(Minus),
-                "*" => return Some(Star),
-                "/" => return Some(Slash),
-                "(" => return Some(LParen),
-                ")" => return Some(RParen),
-                "{" => return Some(LBrace),
-                "}" => return Some(RBrace),
-                "=" => return Some(SingleEq),
-                ";" => return Some(Semicolon),
-                _ => return self.identifier(),
+                // "+" => return Some(Plus),
+                // "-" => return Some(Minus),
+                // "*" => return Some(Star),
+                // "/" => return Some(Slash),
+                // "(" => return Some(LParen),
+                // ")" => return Some(RParen),
+                // "{" => return Some(LBrace),
+                // "}" => return Some(RBrace),
+                // "=" => return Some(SingleEq),
+                // ";" => return Some(Semicolon),
+                // _ => return self.identifier(),
+                _ => return None,
             };
         }
     }
